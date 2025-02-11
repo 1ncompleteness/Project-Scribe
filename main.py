@@ -114,7 +114,7 @@ class ProjectScribeApp:
 
 def main():
     root = tk.Tk()
-    root.geometry("800x600")
+    root.geometry("1024x900")
     app = ProjectScribeApp(root)
     root.mainloop()
 
