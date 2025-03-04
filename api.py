@@ -42,7 +42,11 @@ embeddings, dimension = load_embedding_model(
 
 # if Neo4j is local, you can go to http://localhost:7474/ to browse the database
 neo4j_graph = Neo4jGraph(
+<<<<<<< HEAD
     url=url, username=username, password=password, refresh_schema=True
+=======
+    url=url, username=username, password=password, refresh_schema=False
+>>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
 )
 create_vector_index(neo4j_graph)
 
