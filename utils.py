@@ -47,16 +47,11 @@ def create_constraints(driver):
         "CREATE CONSTRAINT answer_id IF NOT EXISTS FOR (a:Answer) REQUIRE (a.id) IS UNIQUE"
     )
     driver.query(
-<<<<<<< HEAD
         "CREATE CONSTRAINT user_username IF NOT EXISTS FOR (u:User) REQUIRE (u.username) IS UNIQUE"
-=======
-        "CREATE CONSTRAINT user_id IF NOT EXISTS FOR (u:User) REQUIRE (u.id) IS UNIQUE"
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
     )
     driver.query(
         "CREATE CONSTRAINT tag_name IF NOT EXISTS FOR (t:Tag) REQUIRE (t.name) IS UNIQUE"
     )
-<<<<<<< HEAD
     # Add constraints for Note and Journal nodes to ensure consistency
     driver.query(
         "CREATE CONSTRAINT note_id IF NOT EXISTS FOR (n:Note) REQUIRE (n.id) IS UNIQUE"
@@ -64,5 +59,3 @@ def create_constraints(driver):
     driver.query(
         "CREATE CONSTRAINT journal_id IF NOT EXISTS FOR (j:Journal) REQUIRE (j.id) IS UNIQUE"
     )
-=======
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2

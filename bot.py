@@ -38,11 +38,7 @@ logger = get_logger(__name__)
 
 # if Neo4j is local, you can go to http://localhost:7474/ to browse the database
 neo4j_graph = Neo4jGraph(
-<<<<<<< HEAD
     url=url, username=username, password=password, refresh_schema=True
-=======
-    url=url, username=username, password=password, refresh_schema=False
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
 )
 embeddings, dimension = load_embedding_model(
     embedding_model_name, config={"ollama_base_url": ollama_base_url}, logger=logger
@@ -53,26 +49,19 @@ create_constraints(neo4j_graph)
 # Create user constraints and indexes
 def setup_user_schema():
     try:
-<<<<<<< HEAD
         # User constraints
-=======
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
         neo4j_graph.query(
             "CREATE CONSTRAINT user_username IF NOT EXISTS FOR (u:User) REQUIRE u.username IS UNIQUE"
         )
         neo4j_graph.query(
             "CREATE INDEX user_created_at IF NOT EXISTS FOR (u:User) ON u.created_at"
         )
-<<<<<<< HEAD
         
         # Note constraints
-=======
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
         neo4j_graph.query(
             "CREATE CONSTRAINT note_id IF NOT EXISTS FOR (n:Note) REQUIRE n.id IS UNIQUE"
         )
         neo4j_graph.query(
-<<<<<<< HEAD
             "CREATE INDEX note_updated_at IF NOT EXISTS FOR (n:Note) ON n.updated_at"
         )
         
@@ -86,11 +75,6 @@ def setup_user_schema():
         
         # Tag constraints
         neo4j_graph.query(
-=======
-            "CREATE CONSTRAINT journal_id IF NOT EXISTS FOR (j:Journal) REQUIRE j.id IS UNIQUE"
-        )
-        neo4j_graph.query(
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
             "CREATE CONSTRAINT tag_name IF NOT EXISTS FOR (t:Tag) REQUIRE t.name IS UNIQUE"
         )
     except Exception as e:
@@ -189,7 +173,6 @@ def get_next_journal_id():
     return result[0]["max_id"] + 1
 
 def get_user_notes(username):
-<<<<<<< HEAD
     result = neo4j_graph.query(
         """
         MATCH (u:User {username: $username})-[r:OWNS]->(n:Note)
@@ -247,84 +230,14 @@ def get_user_journals(username):
         journals.append(journal)
     
     return journals
-=======
-    try:
-        result = neo4j_graph.query(
-            """
-            MATCH (u:User {username: $username})-[:OWNS]->(n:Note)
-            OPTIONAL MATCH (n)-[:HAS_TAG]->(t:Tag)
-            OPTIONAL MATCH (n)-[:BELONGS_TO]->(j:Journal)
-            RETURN n, 
-                collect(distinct t.name) as tags,
-                j.id as journal_id
-            """,
-            {"username": username}
-        )
-        
-        notes = []
-        for record in result:
-            note = record["n"]
-            note_dict = dict(note)
-            
-            # Convert media from string to list if it exists
-            if "media" in note_dict and isinstance(note_dict["media"], str):
-                try:
-                    note_dict["media"] = json.loads(note_dict["media"])
-                except:
-                    note_dict["media"] = []
-            elif "media" not in note_dict:
-                note_dict["media"] = []
-                
-            # Add tags
-            note_dict["tags"] = record["tags"] if record["tags"] else []
-            
-            # Add journal ID
-            note_dict["journal"] = record["journal_id"]
-            
-            notes.append(note_dict)
-        
-        return notes
-    except Exception as e:
-        logger.error(f"Error getting user notes: {e}")
-        return []
-
-def get_user_journals(username):
-    try:
-        result = neo4j_graph.query(
-            """
-            MATCH (u:User {username: $username})-[:OWNS]->(j:Journal)
-            RETURN j
-            """,
-            {"username": username}
-        )
-        
-        journals = []
-        for record in result:
-            journal = record["j"]
-            journals.append(dict(journal))
-        
-        return journals
-    except Exception as e:
-        logger.error(f"Error getting user journals: {e}")
-        return []
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
 
 def get_note_by_id(note_id, username):
     result = neo4j_graph.query(
         """
-<<<<<<< HEAD
         MATCH (u:User {username: $username})-[r:OWNS]->(n:Note {id: $id})
         OPTIONAL MATCH (n)-[r2:HAS_TAG]->(t:Tag)
         OPTIONAL MATCH (n)-[r3:BELONGS_TO]->(j:Journal)
         RETURN n, collect(DISTINCT t.name) as tags, j.id as journal_id, j.name as journal_name
-=======
-        MATCH (u:User {username: $username})-[:OWNS]->(n:Note {id: $id})
-        OPTIONAL MATCH (n)-[:HAS_TAG]->(t:Tag)
-        OPTIONAL MATCH (n)-[:BELONGS_TO]->(j:Journal)
-        RETURN n, 
-               collect(distinct t.name) as tags,
-               j.id as journal_id
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
         """,
         {"username": username, "id": note_id}
     )
@@ -335,18 +248,12 @@ def get_note_by_id(note_id, username):
     record = result[0]
     note = dict(record["n"])
     
-<<<<<<< HEAD
     # Convert media JSON string back to list
     if "media" in note:
-=======
-    # Convert media from string to list
-    if "media" in note and isinstance(note["media"], str):
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
         try:
             note["media"] = json.loads(note["media"])
         except:
             note["media"] = []
-<<<<<<< HEAD
     else:
         note["media"] = []
     
@@ -360,16 +267,6 @@ def get_note_by_id(note_id, username):
     else:
         note["journal"] = None
         note["journal_name"] = None
-=======
-    elif "media" not in note:
-        note["media"] = []
-        
-    # Add tags
-    note["tags"] = record["tags"] if record["tags"] else []
-    
-    # Add journal ID
-    note["journal"] = record["journal_id"]
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
     
     return note
 
@@ -382,11 +279,7 @@ def save_note_to_db(note, username):
         # Update existing note
         neo4j_graph.query(
             """
-<<<<<<< HEAD
             MATCH (u:User {username: $username})-[r:OWNS]->(n:Note {id: $id})
-=======
-            MATCH (u:User {username: $username})-[:OWNS]->(n:Note {id: $id})
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
             SET n.title = $title,
                 n.content = $content,
                 n.updated_at = $updated_at,
@@ -424,11 +317,7 @@ def save_note_to_db(note, username):
                 updated_at: $updated_at,
                 media: $media
             })
-<<<<<<< HEAD
             CREATE (u)-[r:OWNS]->(n)
-=======
-            CREATE (u)-[:OWNS]->(n)
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
             """,
             {
                 "username": username,
@@ -448,11 +337,7 @@ def save_note_to_db(note, username):
                 """
                 MATCH (n:Note {id: $id})
                 MERGE (t:Tag {name: $tag})
-<<<<<<< HEAD
                 MERGE (n)-[r:HAS_TAG]->(t)
-=======
-                MERGE (n)-[:HAS_TAG]->(t)
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
                 """,
                 {"id": note["id"], "tag": tag}
             )
@@ -463,11 +348,7 @@ def save_note_to_db(note, username):
             """
             MATCH (n:Note {id: $id})
             MATCH (j:Journal {id: $journal_id})
-<<<<<<< HEAD
             MERGE (n)-[r:BELONGS_TO]->(j)
-=======
-            MERGE (n)-[:BELONGS_TO]->(j)
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
             """,
             {"id": note["id"], "journal_id": note["journal"]}
         )
@@ -475,16 +356,10 @@ def save_note_to_db(note, username):
 def delete_note_from_db(note_id, username):
     neo4j_graph.query(
         """
-<<<<<<< HEAD
         MATCH (u:User {username: $username})-[r:OWNS]->(n:Note {id: $id})
         OPTIONAL MATCH (n)-[r1:HAS_TAG]->(:Tag)
         OPTIONAL MATCH (n)-[r2:BELONGS_TO]->(:Journal)
         DELETE r, r1, r2, n
-=======
-        MATCH (u:User {username: $username})-[:OWNS]->(n:Note {id: $id})
-        OPTIONAL MATCH (n)-[r]-()
-        DELETE r, n
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
         """,
         {"username": username, "id": note_id}
     )
@@ -492,14 +367,9 @@ def delete_note_from_db(note_id, username):
 def get_journal_by_id(journal_id, username):
     result = neo4j_graph.query(
         """
-<<<<<<< HEAD
         MATCH (u:User {username: $username})-[r:OWNS]->(j:Journal {id: $id})
         OPTIONAL MATCH (n:Note)-[r2:BELONGS_TO]->(j)
         RETURN j, count(n) as note_count
-=======
-        MATCH (u:User {username: $username})-[:OWNS]->(j:Journal {id: $id})
-        RETURN j
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
         """,
         {"username": username, "id": journal_id}
     )
@@ -507,26 +377,18 @@ def get_journal_by_id(journal_id, username):
     if not result:
         return None
     
-<<<<<<< HEAD
     record = result[0]
     journal = dict(record["j"])
     journal["note_count"] = record["note_count"]
     
     return journal
-=======
-    return dict(result[0]["j"])
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
 
 def save_journal_to_db(journal, username):
     if get_journal_by_id(journal["id"], username):
         # Update existing journal
         neo4j_graph.query(
             """
-<<<<<<< HEAD
             MATCH (u:User {username: $username})-[r:OWNS]->(j:Journal {id: $id})
-=======
-            MATCH (u:User {username: $username})-[:OWNS]->(j:Journal {id: $id})
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
             SET j.name = $name,
                 j.description = $description,
                 j.template = $template
@@ -551,11 +413,7 @@ def save_journal_to_db(journal, username):
                 template: $template,
                 created_at: $created_at
             })
-<<<<<<< HEAD
             CREATE (u)-[r:OWNS]->(j)
-=======
-            CREATE (u)-[:OWNS]->(j)
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
             """,
             {
                 "username": username,
@@ -580,13 +438,8 @@ def delete_journal_from_db(journal_id, username):
     # Then delete the journal
     neo4j_graph.query(
         """
-<<<<<<< HEAD
         MATCH (u:User {username: $username})-[r:OWNS]->(j:Journal {id: $id})
         DELETE r, j
-=======
-        MATCH (u:User {username: $username})-[:OWNS]->(j:Journal {id: $id})
-        DETACH DELETE j
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
         """,
         {"username": username, "id": journal_id}
     )
@@ -605,34 +458,22 @@ def logout():
 
 def user_management():
     if st.session_state.current_user is None:
-<<<<<<< HEAD
-        # Use columns with appropriate widths
-        col1, col2, col3 = st.columns([1, 1, 4])  # First two columns for buttons, third for spacing
-=======
-        # Revert to original layout with two equal columns
-        col1, col2 = st.columns(2)
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
-        
+        # Use a single column instead of two columns for login/register buttons
         if 'show_login' not in st.session_state:
             st.session_state.show_login = True
         
         if 'show_register' not in st.session_state:
             st.session_state.show_register = False
         
-        with col1:
-<<<<<<< HEAD
-            if st.button("Login", use_container_width=True):
-                login()
+        # Place buttons side by side but in a single row
+        col1, col2, col3 = st.columns([1, 1, 8])  # First two columns for buttons, third for spacing
         
-        with col2:
-            if st.button("Register", use_container_width=True):
-=======
+        with col1:
             if st.button("Login"):
                 login()
         
         with col2:
             if st.button("Register"):
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
                 register()
         
         if st.session_state.show_login:
@@ -674,17 +515,9 @@ def user_management():
                         st.success("Registration successful! Please login.")
                         login()
     else:
-<<<<<<< HEAD
-        # User info layout
-        col1, col2 = st.columns([1, 5])  # First column for button, second for spacing
-        
-        col1.write(f"Logged in as: {st.session_state.current_user}")
-        if col1.button("Logout", use_container_width=True):
-=======
         # Revert to simple layout for user info
         st.write(f"Logged in as: {st.session_state.current_user}")
         if st.button("Logout"):
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
             logout()
             st.rerun()
 
@@ -779,31 +612,17 @@ def create_structured_note(note_type):
 
 
 def extract_keywords(note_content):
-<<<<<<< HEAD
-    prompt = f"""Extract exactly 5 meaningful keywords or key phrases from the following note. 
-These should be the most relevant tags that represent the main topics and concepts in the content.
-Format your response as a comma-separated list of single words or short phrases.
-Make sure your response ENDS with these 5 keywords/phrases separated by commas.
-
-Note content:
-{note_content}"""
-    
+    prompt = f"Extract exactly 5 meaningful tags or keywords from the following note that accurately represent its content. Return only a comma-separated list of these keywords without any additional text or explanation:\n\n{note_content}"
     stream_handler = StreamHandler(st.empty())
     result = llm_chain({"question": prompt, "chat_history": []}, callbacks=[stream_handler])["answer"]
     
-    # Extract the last 5 terms from the comma-separated list
+    # Extract all terms from the comma-separated list
     all_terms = [term.strip() for term in result.split(',')]
     
     # Get only the last 5 terms (or fewer if there aren't 5)
     keywords = all_terms[-5:] if len(all_terms) >= 5 else all_terms
     
     return keywords
-=======
-    prompt = f"Extract the top 5 keywords or key phrases from the following note, formatted as a comma-separated list:\n\n{note_content}"
-    stream_handler = StreamHandler(st.empty())
-    result = llm_chain({"question": prompt, "chat_history": []}, callbacks=[stream_handler])["answer"]
-    return [keyword.strip() for keyword in result.split(',')]
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
 
 
 # Journal management functions
@@ -891,47 +710,41 @@ def main():
                 
                 elif agnis_option == "Keyword Extraction":
                     if st.session_state.get('note_editor', False) and st.session_state.get('editing_note'):
-<<<<<<< HEAD
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            if st.button("Extract Keywords"):
-                                note_content = st.session_state.editing_note.get("content", "")
-                                st.session_state['extracted_keywords'] = extract_keywords(note_content)
-                                st.rerun()
-                        
-                        # Display extracted keywords if available
-                        if 'extracted_keywords' in st.session_state and st.session_state['extracted_keywords']:
-                            st.info("Suggested Keywords:")
-                            st.write(", ".join(st.session_state['extracted_keywords']))
-                            
-                            with col2:
-                                if st.button("Apply Keywords as Tags"):
-                                    current_tags = st.session_state.editing_note.get("tags", [])
-                                    # Merge tags and remove duplicates
-                                    combined_tags = current_tags.copy()
-                                    for keyword in st.session_state['extracted_keywords']:
-                                        if keyword and keyword not in combined_tags:
-                                            combined_tags.append(keyword)
-                                    
-                                    st.session_state.editing_note["tags"] = combined_tags
-                                    # Save to database immediately to persist changes
-                                    save_note_to_db(st.session_state.editing_note, st.session_state.current_user)
-                                    st.success("Tags applied and saved to database!")
-                                    # Clear the extracted keywords to refresh UI
-                                    del st.session_state['extracted_keywords']
-                                    st.rerun()
-=======
                         if st.button("Extract Keywords"):
                             note_content = st.session_state.editing_note.get("content", "")
-                            keywords = extract_keywords(note_content)
-                            st.info("Suggested Keywords:")
-                            st.write(", ".join(keywords))
                             
-                            if st.button("Apply Keywords as Tags"):
-                                current_tags = st.session_state.editing_note.get("tags", [])
-                                st.session_state.editing_note["tags"] = list(set(current_tags + keywords))
-                                st.success("Tags applied!")
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
+                            # Create a container for the extraction process
+                            result_container = st.container()
+                            
+                            # Extract keywords
+                            keywords = extract_keywords(note_content)
+                            
+                            # Display only the extracted keywords
+                            with result_container:
+                                st.info("Extracted Tags:")
+                                st.write(", ".join(keywords))
+                                
+                                # Store keywords in session state for later use
+                                st.session_state.extracted_keywords = keywords
+                                
+                                if st.button("Apply Tags"):
+                                    # Get current tags and remove empty strings
+                                    current_tags = [tag for tag in st.session_state.editing_note.get("tags", []) if tag.strip()]
+                                    
+                                    # Add only new keywords that aren't already in the tags
+                                    new_tags = current_tags.copy()
+                                    for keyword in keywords:
+                                        if keyword and keyword not in current_tags:
+                                            new_tags.append(keyword)
+                                    
+                                    # Update tags in the editing note
+                                    st.session_state.editing_note["tags"] = new_tags
+                                    
+                                    # Update the note in the database immediately
+                                    save_note_to_db(st.session_state.editing_note, st.session_state.current_user)
+                                    
+                                    st.success("Tags applied and saved!")
+                                    st.rerun()  # Refresh the UI to show updated tags
                     else:
                         st.info("Open a note to extract keywords")
             
@@ -1007,26 +820,16 @@ def main():
                             st.audio(audio_data)
                 
                 # Note editor buttons (save/cancel)
-<<<<<<< HEAD
-                col1, col2, col3 = st.columns([1, 1, 4])  # First two columns for buttons, third for spacing
-                with col1:
-                    if st.button("Save", use_container_width=True):
-=======
-                col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns([1, 1, 8])  # First two columns for buttons, third for spacing
                 with col1:
                     if st.button("Save"):
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
                         if note_title.strip():
                             save_note()
                             st.rerun()
                         else:
                             st.error("Title is required")
                 with col2:
-<<<<<<< HEAD
-                    if st.button("Cancel", use_container_width=True):
-=======
                     if st.button("Cancel"):
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
                         cancel_note()
                         st.rerun()
             elif st.session_state.get('journal_editor', False) and st.session_state.get('editing_journal'):
@@ -1049,26 +852,16 @@ def main():
                 st.session_state.editing_journal["template"] = journal_template
                 
                 # Journal editor buttons
-<<<<<<< HEAD
-                col1, col2, col3 = st.columns([1, 1, 4])  # First two columns for buttons, third for spacing
-                with col1:
-                    if st.button("Save Journal", use_container_width=True):
-=======
-                col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns([1, 1, 8])  # First two columns for buttons, third for spacing
                 with col1:
                     if st.button("Save Journal"):
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
                         if journal_name.strip():
                             save_journal()
                             st.rerun()
                         else:
                             st.error("Journal name is required")
                 with col2:
-<<<<<<< HEAD
-                    if st.button("Cancel Journal", use_container_width=True):
-=======
                     if st.button("Cancel Journal"):
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
                         cancel_journal()
                         st.rerun()
             else:
@@ -1100,7 +893,7 @@ def main():
                                         audio_data = base64.b64decode(media["data"])
                                         st.audio(audio_data)
                                 
-                                col1, col2 = st.columns(2)
+                                col1, col2, col3 = st.columns([1, 1, 8])  # First two columns for buttons, third for spacing
                                 with col1:
                                     if st.button("Edit", key=f"edit_{note['id']}"):
                                         edit_note(note)
@@ -1137,7 +930,7 @@ def main():
                                 else:
                                     st.info("No notes in this journal yet")
                                 
-                                col1, col2, col3 = st.columns(3)
+                                col1, col2, col3, col4 = st.columns([1, 1, 1, 7])  # Three columns for buttons, fourth for spacing
                                 with col1:
                                     if st.button("Edit", key=f"edit_j_{journal['id']}"):
                                         edit_journal(journal)
@@ -1164,7 +957,6 @@ def main():
                         # Search in database
                         result = neo4j_graph.query(
                             """
-<<<<<<< HEAD
                             MATCH (u:User {username: $username})-[r:OWNS]->(n:Note)
                             WHERE toLower(n.title) CONTAINS toLower($query) OR
                                   toLower(n.content) CONTAINS toLower($query) OR
@@ -1173,16 +965,6 @@ def main():
                                       WHERE toLower(t.name) CONTAINS toLower($query)
                                   }
                             OPTIONAL MATCH (n)-[r3:HAS_TAG]->(t:Tag)
-=======
-                            MATCH (u:User {username: $username})-[:OWNS]->(n:Note)
-                            WHERE toLower(n.title) CONTAINS toLower($query) OR
-                                  toLower(n.content) CONTAINS toLower($query) OR
-                                  EXISTS {
-                                      MATCH (n)-[:HAS_TAG]->(t:Tag)
-                                      WHERE toLower(t.name) CONTAINS toLower($query)
-                                  }
-                            OPTIONAL MATCH (n)-[:HAS_TAG]->(t:Tag)
->>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
                             RETURN n, collect(distinct t.name) as tags
                             """,
                             {"username": user, "query": search_query}
