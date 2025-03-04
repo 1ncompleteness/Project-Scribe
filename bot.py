@@ -458,22 +458,34 @@ def logout():
 
 def user_management():
     if st.session_state.current_user is None:
-        # Use a single column instead of two columns for login/register buttons
+<<<<<<< HEAD
+        # Use columns with appropriate widths
+        col1, col2, col3 = st.columns([1, 1, 4])  # First two columns for buttons, third for spacing
+=======
+        # Revert to original layout with two equal columns
+        col1, col2 = st.columns(2)
+>>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
+        
         if 'show_login' not in st.session_state:
             st.session_state.show_login = True
         
         if 'show_register' not in st.session_state:
             st.session_state.show_register = False
         
-        # Place buttons side by side but in a single row
-        col1, col2, col3 = st.columns([1, 1, 8])  # First two columns for buttons, third for spacing
-        
         with col1:
+<<<<<<< HEAD
+            if st.button("Login", use_container_width=True):
+                login()
+        
+        with col2:
+            if st.button("Register", use_container_width=True):
+=======
             if st.button("Login"):
                 login()
         
         with col2:
             if st.button("Register"):
+>>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
                 register()
         
         if st.session_state.show_login:
@@ -515,9 +527,17 @@ def user_management():
                         st.success("Registration successful! Please login.")
                         login()
     else:
+<<<<<<< HEAD
+        # User info layout
+        col1, col2 = st.columns([1, 5])  # First column for button, second for spacing
+        
+        col1.write(f"Logged in as: {st.session_state.current_user}")
+        if col1.button("Logout", use_container_width=True):
+=======
         # Revert to simple layout for user info
         st.write(f"Logged in as: {st.session_state.current_user}")
         if st.button("Logout"):
+>>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
             logout()
             st.rerun()
 
@@ -612,7 +632,15 @@ def create_structured_note(note_type):
 
 
 def extract_keywords(note_content):
-    prompt = f"Extract exactly 5 meaningful tags or keywords from the following note that accurately represent its content. Return only a comma-separated list of these keywords without any additional text or explanation:\n\n{note_content}"
+<<<<<<< HEAD
+    prompt = f"""Extract exactly 5 meaningful keywords or key phrases from the following note. 
+These should be the most relevant tags that represent the main topics and concepts in the content.
+Format your response as a comma-separated list of single words or short phrases.
+Make sure your response ENDS with these 5 keywords/phrases separated by commas.
+
+Note content:
+{note_content}"""
+    
     stream_handler = StreamHandler(st.empty())
     result = llm_chain({"question": prompt, "chat_history": []}, callbacks=[stream_handler])["answer"]
     
@@ -710,41 +738,47 @@ def main():
                 
                 elif agnis_option == "Keyword Extraction":
                     if st.session_state.get('note_editor', False) and st.session_state.get('editing_note'):
+<<<<<<< HEAD
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("Extract Keywords"):
+                                note_content = st.session_state.editing_note.get("content", "")
+                                st.session_state['extracted_keywords'] = extract_keywords(note_content)
+                                st.rerun()
+                        
+                        # Display extracted keywords if available
+                        if 'extracted_keywords' in st.session_state and st.session_state['extracted_keywords']:
+                            st.info("Suggested Keywords:")
+                            st.write(", ".join(st.session_state['extracted_keywords']))
+                            
+                            with col2:
+                                if st.button("Apply Keywords as Tags"):
+                                    current_tags = st.session_state.editing_note.get("tags", [])
+                                    # Merge tags and remove duplicates
+                                    combined_tags = current_tags.copy()
+                                    for keyword in st.session_state['extracted_keywords']:
+                                        if keyword and keyword not in combined_tags:
+                                            combined_tags.append(keyword)
+                                    
+                                    st.session_state.editing_note["tags"] = combined_tags
+                                    # Save to database immediately to persist changes
+                                    save_note_to_db(st.session_state.editing_note, st.session_state.current_user)
+                                    st.success("Tags applied and saved to database!")
+                                    # Clear the extracted keywords to refresh UI
+                                    del st.session_state['extracted_keywords']
+                                    st.rerun()
+=======
                         if st.button("Extract Keywords"):
                             note_content = st.session_state.editing_note.get("content", "")
-                            
-                            # Create a container for the extraction process
-                            result_container = st.container()
-                            
-                            # Extract keywords
                             keywords = extract_keywords(note_content)
+                            st.info("Suggested Keywords:")
+                            st.write(", ".join(keywords))
                             
-                            # Display only the extracted keywords
-                            with result_container:
-                                st.info("Extracted Tags:")
-                                st.write(", ".join(keywords))
-                                
-                                # Store keywords in session state for later use
-                                st.session_state.extracted_keywords = keywords
-                                
-                                if st.button("Apply Tags"):
-                                    # Get current tags and remove empty strings
-                                    current_tags = [tag for tag in st.session_state.editing_note.get("tags", []) if tag.strip()]
-                                    
-                                    # Add only new keywords that aren't already in the tags
-                                    new_tags = current_tags.copy()
-                                    for keyword in keywords:
-                                        if keyword and keyword not in current_tags:
-                                            new_tags.append(keyword)
-                                    
-                                    # Update tags in the editing note
-                                    st.session_state.editing_note["tags"] = new_tags
-                                    
-                                    # Update the note in the database immediately
-                                    save_note_to_db(st.session_state.editing_note, st.session_state.current_user)
-                                    
-                                    st.success("Tags applied and saved!")
-                                    st.rerun()  # Refresh the UI to show updated tags
+                            if st.button("Apply Keywords as Tags"):
+                                current_tags = st.session_state.editing_note.get("tags", [])
+                                st.session_state.editing_note["tags"] = list(set(current_tags + keywords))
+                                st.success("Tags applied!")
+>>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
                     else:
                         st.info("Open a note to extract keywords")
             
@@ -820,16 +854,26 @@ def main():
                             st.audio(audio_data)
                 
                 # Note editor buttons (save/cancel)
-                col1, col2, col3 = st.columns([1, 1, 8])  # First two columns for buttons, third for spacing
+<<<<<<< HEAD
+                col1, col2, col3 = st.columns([1, 1, 4])  # First two columns for buttons, third for spacing
+                with col1:
+                    if st.button("Save", use_container_width=True):
+=======
+                col1, col2 = st.columns(2)
                 with col1:
                     if st.button("Save"):
+>>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
                         if note_title.strip():
                             save_note()
                             st.rerun()
                         else:
                             st.error("Title is required")
                 with col2:
+<<<<<<< HEAD
+                    if st.button("Cancel", use_container_width=True):
+=======
                     if st.button("Cancel"):
+>>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
                         cancel_note()
                         st.rerun()
             elif st.session_state.get('journal_editor', False) and st.session_state.get('editing_journal'):
@@ -852,16 +896,26 @@ def main():
                 st.session_state.editing_journal["template"] = journal_template
                 
                 # Journal editor buttons
-                col1, col2, col3 = st.columns([1, 1, 8])  # First two columns for buttons, third for spacing
+<<<<<<< HEAD
+                col1, col2, col3 = st.columns([1, 1, 4])  # First two columns for buttons, third for spacing
+                with col1:
+                    if st.button("Save Journal", use_container_width=True):
+=======
+                col1, col2 = st.columns(2)
                 with col1:
                     if st.button("Save Journal"):
+>>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
                         if journal_name.strip():
                             save_journal()
                             st.rerun()
                         else:
                             st.error("Journal name is required")
                 with col2:
+<<<<<<< HEAD
+                    if st.button("Cancel Journal", use_container_width=True):
+=======
                     if st.button("Cancel Journal"):
+>>>>>>> f46f60bbe533fb15c5b56ff7a575cc7d74cd78d2
                         cancel_journal()
                         st.rerun()
             else:
