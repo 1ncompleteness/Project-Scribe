@@ -91,6 +91,7 @@
     const handleNoteSelect = (event) => {
         currentNoteId = event.detail.id;
         isCreatingNote = false;
+        activeSection = 'notes'; // Always switch to notes section when selecting a note
     };
     
     // Handle journal selection

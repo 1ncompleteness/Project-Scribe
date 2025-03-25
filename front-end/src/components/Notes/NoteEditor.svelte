@@ -1,5 +1,5 @@
 <script>
-    import { createEventDispatcher, onMount } from 'svelte';
+    import { createEventDispatcher, onMount, tick } from 'svelte';
     import { notesStore, noteStates } from '../../stores/notes.store';
     import { aiStore, aiStates } from '../../stores/ai.store';
     import SvelteMarkdown from 'svelte-markdown';
@@ -12,33 +12,41 @@
     let tagInput = '';
     let isEditing = true;
     let isSaving = false;
+    let showSaved = false; // Simple flag to show saved state
     let errorMessage = '';
     let availableTags = [];
     let spellCheck = true;
     let editorContainer;
     let mediaFiles = [];
     let fileInput;
+    let selectedJournalId = '';
+    let note = null;
+    let isInitialized = false;
     
     const dispatch = createEventDispatcher();
     
     // Initialize the editor with the current note if noteId is provided
-    $: if (noteId && $notesStore.notes) {
-        const note = $notesStore.notes.find(n => n.id === noteId);
+    $: if (noteId && $notesStore.notes && !isInitialized) {
+        note = $notesStore.notes.find(n => n.id === noteId);
         if (note) {
             title = note.title;
             content = note.content;
             tags = [...note.tags];
             
+            // Find the journal this note belongs to
+            const journal = $notesStore.journals.find(j => j.noteIds.includes(noteId));
+            if (journal) {
+                selectedJournalId = journal.id;
+            }
+            
             // Extract media files from content if any
             extractMediaFromContent();
+            isInitialized = true;
         }
     }
     
     // Fetch available tags from the store
-    $: availableTags = $notesStore.tags;
-    
-    // Monitor saving state
-    $: isSaving = $notesStore.state === noteStates.SAVING;
+    $: availableTags = $notesStore.tags || [];
     
     // Extract media files from content
     function extractMediaFromContent() {
@@ -75,25 +83,84 @@
             return;
         }
         
+        // Clear previous states
+        errorMessage = '';
+        showSaved = false;
+        isSaving = true;
+        
         try {
+            let result;
+            let updatedNoteId;
+            
             if (noteId) {
                 // Update existing note
-                await notesStore.updateNote(noteId, {
+                result = await notesStore.updateNote(noteId, {
                     title: title.trim(),
                     content,
                     tags
                 });
+                
+                if (result) {
+                    updatedNoteId = noteId;
+                }
             } else {
                 // Create new note
-                const result = await notesStore.createNote(title.trim(), content, tags);
+                result = await notesStore.createNote(title.trim(), content, tags);
                 if (result) {
-                    dispatch('created', { id: $notesStore.currentNote.id });
+                    updatedNoteId = $notesStore.currentNote?.id;
+                    if (updatedNoteId) {
+                        dispatch('created', { id: updatedNoteId });
+                    }
                 }
             }
             
-            errorMessage = '';
+            // Handle journal assignment if needed
+            if (result && updatedNoteId && selectedJournalId) {
+                // First check if the note is already in a different journal
+                const oldJournal = $notesStore.journals.find(j => 
+                    j.id !== selectedJournalId && j.noteIds.includes(updatedNoteId)
+                );
+                
+                // If found in another journal, remove it
+                if (oldJournal) {
+                    await notesStore.removeNoteFromJournal(updatedNoteId, oldJournal.id);
+                }
+                
+                // Now add to the selected journal
+                const targetJournal = $notesStore.journals.find(j => j.id === selectedJournalId);
+                if (targetJournal && !targetJournal.noteIds.includes(updatedNoteId)) {
+                    await notesStore.addNoteToJournal(updatedNoteId, selectedJournalId);
+                }
+            }
+            
+            // Force a refresh of the note data
+            if (updatedNoteId) {
+                // Reload notes from the store to ensure we have the latest data
+                await notesStore.init();
+                
+                // Retrieve updated note from the store to ensure freshness
+                note = $notesStore.notes.find(n => n.id === updatedNoteId);
+                if (note) {
+                    title = note.title;
+                    content = note.content;
+                    tags = [...note.tags];
+                }
+            }
+            
+            // Show saved indication
+            isSaving = false;
+            showSaved = true;
+            
+            // Reset after 2 seconds
+            setTimeout(() => {
+                showSaved = false;
+            }, 2000);
+            
+            await tick(); // Force UI update
+            
         } catch (error) {
             errorMessage = 'Error saving note: ' + error.message;
+            isSaving = false;
         }
     };
     
@@ -266,6 +333,13 @@
         </div>
     {/if}
     
+    <!-- Save Success Banner -->
+    {#if showSaved}
+        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4" role="alert">
+            <span class="block sm:inline">✓ Note saved successfully!</span>
+        </div>
+    {/if}
+    
     <div class="mb-4">
         <input
             type="text"
@@ -273,6 +347,23 @@
             placeholder="Note Title"
             class="w-full text-xl font-semibold p-2 border-b border-indigo-200 dark:border-indigo-700 focus:outline-none focus:border-indigo-500 bg-transparent dark:text-white"
         />
+    </div>
+    
+    <!-- Journal Selection -->
+    <div class="mb-4">
+        <label for="journal-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Select Journal
+        </label>
+        <select
+            id="journal-select"
+            bind:value={selectedJournalId}
+            class="w-full p-2 border border-gray-200 dark:border-gray-700 rounded focus:outline-none focus:border-indigo-500 bg-transparent dark:text-white"
+        >
+            <option value="">No Journal</option>
+            {#each $notesStore.journals as journal}
+                <option value={journal.id}>{journal.title}</option>
+            {/each}
+        </select>
     </div>
     
     <div class="flex justify-between mb-4 flex-wrap gap-2">
@@ -287,9 +378,16 @@
             <button
                 on:click={saveNote}
                 disabled={isSaving}
-                class="px-3 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 text-sm disabled:opacity-50"
+                class="px-3 py-1 rounded text-white text-sm disabled:opacity-50
+                       {showSaved ? 'bg-green-600 hover:bg-green-700' : 'bg-indigo-600 hover:bg-indigo-700'}"
             >
-                {isSaving ? 'Saving...' : 'Save'}
+                {#if isSaving}
+                    Saving...
+                {:else if showSaved}
+                    Saved!
+                {:else}
+                    Save
+                {/if}
             </button>
             
             <label
