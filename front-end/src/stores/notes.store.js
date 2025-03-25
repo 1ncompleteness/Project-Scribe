@@ -76,6 +76,7 @@ function createNotesStore() {
         
         // Create a new note
         createNote: async (title = 'Untitled Note', content = '', tags = []) => {
+            // Set state to SAVING before starting the operation
             update(store => ({ ...store, state: noteStates.SAVING }));
             
             try {
@@ -88,12 +89,13 @@ function createNotesStore() {
                 
                 const newNote = await notesService.createNote(userId, title, content, tags);
                 
+                // Update the store with the new note and set state to IDLE
                 update(store => {
                     const updatedNotes = [...store.notes, newNote];
                     
                     return {
                         ...store,
-                        state: noteStates.IDLE,
+                        state: noteStates.IDLE, // Ensure this is set to IDLE
                         notes: updatedNotes,
                         filteredNotes: store.searchTerm 
                             ? updatedNotes.filter(note => 
@@ -106,32 +108,59 @@ function createNotesStore() {
                     };
                 });
                 
+                // Make sure state is IDLE even if something went wrong with the update process
+                setTimeout(() => {
+                    update(store => {
+                        if (store.state === noteStates.SAVING) {
+                            return { ...store, state: noteStates.IDLE };
+                        }
+                        return store;
+                    });
+                }, 1000); // Add a 1-second failsafe
+                
                 return true;
             } catch (error) {
+                // Set state to ERROR if there was an error
                 update(store => ({
                     ...store,
                     state: noteStates.ERROR,
                     error: error.message
                 }));
+                
+                // Set state back to IDLE after a short delay
+                setTimeout(() => {
+                    update(store => ({ ...store, state: noteStates.IDLE }));
+                }, 2000);
+                
                 return false;
             }
         },
         
         // Update an existing note
         updateNote: async (noteId, updatedData) => {
+            // Set state to SAVING before starting the update
             update(store => ({ ...store, state: noteStates.SAVING }));
             
             try {
                 const { title, content, tags } = updatedData;
                 
                 // Find the current note to get existing data for any missing fields
-                const noteIndex = get(this).notes.findIndex(note => note.id === noteId);
+                let currentNote;
+                
+                // Use a temporary variable to access the store state
+                let storeSnapshot = { notes: [] };
+                update(state => {
+                    storeSnapshot = state;
+                    return state;
+                });
+                
+                const noteIndex = storeSnapshot.notes.findIndex(note => note.id === noteId);
                 
                 if (noteIndex === -1) {
                     throw new Error('Note not found');
                 }
                 
-                const currentNote = get(this).notes[noteIndex];
+                currentNote = storeSnapshot.notes[noteIndex];
                 
                 // Update the note in Neo4j
                 const updatedNote = await notesService.updateNote(
@@ -141,17 +170,18 @@ function createNotesStore() {
                     tags || currentNote.tags
                 );
                 
+                // Update the store with the updated note and set state to IDLE
                 update(store => {
                     const updatedNotes = [...store.notes];
-                    const noteIndex = updatedNotes.findIndex(note => note.id === noteId);
+                    const idx = updatedNotes.findIndex(note => note.id === noteId);
                     
-                    if (noteIndex !== -1) {
-                        updatedNotes[noteIndex] = updatedNote;
+                    if (idx !== -1) {
+                        updatedNotes[idx] = updatedNote;
                     }
                     
                     return {
                         ...store,
-                        state: noteStates.IDLE,
+                        state: noteStates.IDLE, // Ensure this is set to IDLE
                         notes: updatedNotes,
                         filteredNotes: store.searchTerm 
                             ? updatedNotes.filter(note => 
@@ -164,13 +194,30 @@ function createNotesStore() {
                     };
                 });
                 
+                // Make sure state is IDLE even if something went wrong with the update process
+                setTimeout(() => {
+                    update(store => {
+                        if (store.state === noteStates.SAVING) {
+                            return { ...store, state: noteStates.IDLE };
+                        }
+                        return store;
+                    });
+                }, 1000); // Add a 1-second failsafe
+                
                 return true;
             } catch (error) {
+                // Set state to ERROR if there was an error
                 update(store => ({
                     ...store,
                     state: noteStates.ERROR,
                     error: error.message
                 }));
+                
+                // Set state back to IDLE after a short delay
+                setTimeout(() => {
+                    update(store => ({ ...store, state: noteStates.IDLE }));
+                }, 2000);
+                
                 return false;
             }
         },
@@ -263,13 +310,22 @@ function createNotesStore() {
                 const { title, description } = updatedData;
                 
                 // Find the current journal to get existing data for any missing fields
-                const journalIndex = get(this).journals.findIndex(journal => journal.id === journalId);
+                let currentJournal;
+                
+                // Use a temporary variable to access the store state
+                let storeSnapshot = { journals: [] };
+                update(state => {
+                    storeSnapshot = state;
+                    return state;
+                });
+                
+                const journalIndex = storeSnapshot.journals.findIndex(journal => journal.id === journalId);
                 
                 if (journalIndex === -1) {
                     throw new Error('Journal not found');
                 }
                 
-                const currentJournal = get(this).journals[journalIndex];
+                currentJournal = storeSnapshot.journals[journalIndex];
                 
                 // Update the journal in Neo4j
                 const updatedJournal = await notesService.updateJournal(
