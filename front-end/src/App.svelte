@@ -8,11 +8,6 @@
     import { chatStates, chatStore } from "./lib/chat.store.js";
     import Modal from "./lib/Modal.svelte";
     import { generationStore } from "./lib/generation.store";
-    import { onMount } from 'svelte';
-    import { authStore, authStates } from './stores/auth.store';
-    import Auth from './components/Auth/Auth.svelte';
-    import Dashboard from './components/Dashboard/Dashboard.svelte';
-    import neo4jService from './services/neo4j.service';
 
     let ragMode = false;
     let question = "How can I calculate age from date of birth in Cypher?";
@@ -20,7 +15,6 @@
     let input;
     let senderImages = { bot: botImage, me: meImage };
     let generationModalOpen = false;
-    let connectionError = null;
 
     function send() {
         chatStore.send(question, ragMode);
@@ -48,45 +42,74 @@
         node.focus();
     }
     // send();
-
-    // Check authentication and database connection status on mount
-    onMount(async () => {
-        // First try to connect to Neo4j
-        try {
-            const connected = await neo4jService.connect();
-            if (!connected) {
-                connectionError = "Failed to connect to Neo4j database. Please make sure the database is running.";
-                return;
-            }
-            
-            // Then check authentication
-            await authStore.checkAuth();
-        } catch (error) {
-            connectionError = `Database connection error: ${error.message}`;
-        }
-    });
 </script>
 
-<main class="h-full">
-    {#if connectionError}
-        <div class="h-full flex items-center justify-center bg-red-50">
-            <div class="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
-                <h2 class="text-2xl font-bold text-red-600 mb-4">Database Connection Error</h2>
-                <p class="text-gray-700 mb-6">{connectionError}</p>
-                <button 
-                    class="w-full bg-indigo-600 text-white py-2 px-4 rounded hover:bg-indigo-700"
-                    on:click={() => window.location.reload()}
+<main class="h-full text-sm bg-gradient-to-t from-indigo-100 bg-fixed overflow-hidden">
+    <div on:scroll={scrolling} class="flex h-full flex-col py-12 overflow-y-auto" use:scrollToBottom={$chatStore}>
+        <div class="w-4/5 mx-auto flex flex-col mb-32">
+            {#each $chatStore.data as message (message.id)}
+                <div
+                    class="max-w-[80%] min-w-[40%] rounded-lg p-4 mb-4 overflow-x-auto bg-white border border-indigo-200"
+                    class:self-end={message.from === "me"}
+                    class:text-right={message.from === "me"}
                 >
-                    Retry Connection
-                </button>
+                    <div class="flex flex-row gap-2">
+                        {#if message.from === "me"}
+                            <button
+                                aria-label="Generate a new internal ticket from this question"
+                                title="Generate a new internal ticket from this question"
+                                on:click={() => generateTicket(message.text)}
+                                class="w-6 h-6 flex flex-col justify-center items-center border rounded border-indigo-200"
+                                ><External --color="#ccc" --hover-color="#999" /></button
+                            >
+                        {/if}
+                        <div
+                            class:ml-auto={message.from === "me"}
+                            class="relative w-12 h-12 border border-indigo-200 rounded flex justify-center items-center overflow-hidden"
+                        >
+                            <img src={senderImages[message.from]} alt="" class="rounded-sm" />
+                        </div>
+                        {#if message.from === "bot"}
+                            <div class="text-sm">
+                                <div>Model: {message.model ? message.model : ""}</div>
+                                <div>RAG: {message.rag ? "Enabled" : "Disabled"}</div>
+                            </div>
+                        {/if}
+                    </div>
+                    <div class="mt-4"><SvelteMarkdown source={message.text} renderers={{ link: MdLink }} /></div>
+                </div>
+            {/each}
+        </div>
+        <div class="text-sm w-full fixed bottom-16">
+            <div class="shadow-lg bg-indigo-50 rounded-lg w-4/5 xl:w-2/3 2xl:w-1/2 mx-auto">
+                <div class="rounded-t-lg px-4 py-2 font-light">
+                    <div class="font-semibold">RAG mode</div>
+                    <div class="">
+                        <label class="mr-2">
+                            <input type="radio" bind:group={ragMode} value={false} /> Disabled
+                        </label>
+                        <label>
+                            <input type="radio" bind:group={ragMode} value={true} /> Enabled
+                        </label>
+                    </div>
+                </div>
+                <form class="rounded-md w-full bg-white p-2 m-0" on:submit|preventDefault={send}>
+                    <input
+                        placeholder="What coding related question can I help you with?"
+                        disabled={$chatStore.state === chatStates.RECEIVING}
+                        class="text-lg w-full bg-white focus:outline-none px-4"
+                        bind:value={question}
+                        bind:this={input}
+                        type="text"
+                    />
+                </form>
             </div>
         </div>
-    {:else if $authStore.state === authStates.LOGGED_IN}
-        <Dashboard />
-    {:else}
-        <Auth />
-    {/if}
+    </div>
 </main>
+{#if generationModalOpen}
+    <Modal title="my title" text="my text" on:close={() => (generationModalOpen = false)} />
+{/if}
 
 <style>
     :global(pre) {
@@ -94,21 +117,5 @@
     }
     :global(code) {
         @apply text-indigo-500;
-    }
-
-    :global(html, body) {
-        height: 100%;
-        margin: 0;
-        padding: 0;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-            Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-    }
-
-    :global(#app) {
-        height: 100%;
-    }
-
-    main {
-        height: 100%;
     }
 </style>

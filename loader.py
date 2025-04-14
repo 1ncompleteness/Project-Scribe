@@ -1,7 +1,7 @@
 import os
 import requests
 from dotenv import load_dotenv
-from langchain_community.graphs import Neo4jGraph
+from langchain_neo4j import Neo4jGraph
 import streamlit as st
 from streamlit.logger import get_logger
 from chains import load_embedding_model
@@ -15,8 +15,6 @@ username = os.getenv("NEO4J_USERNAME")
 password = os.getenv("NEO4J_PASSWORD")
 ollama_base_url = os.getenv("OLLAMA_BASE_URL")
 embedding_model_name = os.getenv("EMBEDDING_MODEL")
-# Remapping for Langchain Neo4j integration
-os.environ["NEO4J_URL"] = url
 
 logger = get_logger(__name__)
 
@@ -28,7 +26,7 @@ embeddings, dimension = load_embedding_model(
 
 # if Neo4j is local, you can go to http://localhost:7474/ to browse the database
 neo4j_graph = Neo4jGraph(
-    url=url, username=username, password=password, refresh_schema=True
+    url=url, username=username, password=password, refresh_schema=False
 )
 
 create_constraints(neo4j_graph)

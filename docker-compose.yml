@@ -2,14 +2,12 @@ services:
 
   llm: &llm
     image: ollama/ollama:latest
-    container_name: llm
     profiles: ["linux"]
     networks:
       - net
 
   llm-gpu:
     <<: *llm
-    container_name: llm-gpu
     profiles: ["linux-gpu"]
     deploy:
       resources:
@@ -21,26 +19,24 @@ services:
 
   pull-model:
     image: genai-stack/pull-model:latest
-    container_name: pull-model
     build:
       context: .
       dockerfile: pull_model.Dockerfile
     environment:
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL-http://host.docker.internal:11434}
-      - LLM=${LLM-llama3}
+      - LLM=${LLM-llama2}
     networks:
       - net
     tty: true
 
   database:
     user: neo4j:neo4j
-    image: neo4j:5.23
-    container_name: database
+    image: neo4j:5.26
     ports:
       - 7687:7687
       - 7474:7474
     volumes:
-      - neo4j-data:/data
+      - $PWD/data:/data
     environment:
       - NEO4J_AUTH=${NEO4J_USERNAME-neo4j}/${NEO4J_PASSWORD-password}
       - NEO4J_PLUGINS=["apoc"]
@@ -55,8 +51,6 @@ services:
       - net
 
   loader:
-    image: loader:latest
-    container_name: loader
     build:
       context: .
       dockerfile: loader.Dockerfile
@@ -99,8 +93,6 @@ services:
 
 
   bot:
-    image: bot:latest
-    container_name: bot
     build:
       context: .
       dockerfile: bot.Dockerfile
@@ -113,7 +105,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY-}      
       - GOOGLE_API_KEY=${GOOGLE_API_KEY-}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL-http://host.docker.internal:11434}
-      - LLM=${LLM-llama3}
+      - LLM=${LLM-llama2}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL-sentence_transformer}
       - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT-"https://api.smith.langchain.com"}
       - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2-false}
@@ -142,8 +134,6 @@ services:
       - 8501:8501
 
   pdf_bot:
-    image: pdf_bot:latest
-    container_name: pdf_bot
     build:
       context: .
       dockerfile: pdf_bot.Dockerfile
@@ -154,7 +144,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY-}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY-}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL-http://host.docker.internal:11434}
-      - LLM=${LLM-llama3}
+      - LLM=${LLM-llama2}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL-sentence_transformer}
       - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT-"https://api.smith.langchain.com"}
       - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2-false}
@@ -183,8 +173,6 @@ services:
       - 8503:8503
 
   api:
-    image: api:latest
-    container_name: api
     build:
       context: .
       dockerfile: api.Dockerfile
@@ -197,7 +185,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}  
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL-http://host.docker.internal:11434}
-      - LLM=${LLM-llama3}
+      - LLM=${LLM-llama2}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL-sentence_transformer}
       - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT-"https://api.smith.langchain.com"}
       - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2-false}
@@ -231,8 +219,6 @@ services:
       retries: 5
 
   front-end:
-    image: front-end:latest
-    container_name: front-end
     build:
       context: .
       dockerfile: front-end.Dockerfile
@@ -255,6 +241,3 @@ services:
 
 networks:
   net:
-
-volumes:
-  neo4j-data:
