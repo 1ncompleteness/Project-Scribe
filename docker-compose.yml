@@ -220,8 +220,8 @@ services:
 
   front-end:
     build:
-      context: .
-      dockerfile: front-end.Dockerfile
+      context: ./front-end
+      dockerfile: Dockerfile
     x-develop:
       watch:
         - action: sync
@@ -237,7 +237,9 @@ services:
     networks:
       - net
     ports:
-      - 8505:8505
+      - 8505:3000
+    environment:
+      - REACT_APP_API_URL=http://api:8504
 
 networks:
   net:
