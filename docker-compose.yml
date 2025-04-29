@@ -51,6 +51,7 @@ services:
       - net
 
   loader:
+    profiles: ["genai-stack"]
     build:
       context: .
       dockerfile: loader.Dockerfile
@@ -91,8 +92,8 @@ services:
       - 8081:8080
       - 8502:8502
 
-
   bot:
+    profiles: ["genai-stack"]
     build:
       context: .
       dockerfile: bot.Dockerfile
@@ -134,6 +135,7 @@ services:
       - 8501:8501
 
   pdf_bot:
+    profiles: ["genai-stack"]
     build:
       context: .
       dockerfile: pdf_bot.Dockerfile
@@ -173,6 +175,7 @@ services:
       - 8503:8503
 
   api:
+    profiles: ["genai-stack"]
     build:
       context: .
       dockerfile: api.Dockerfile
@@ -232,14 +235,41 @@ services:
         - action: rebuild
           path: ./front-end/package.json
     depends_on:
-      api:
+      backend:
         condition: service_healthy
     networks:
       - net
     ports:
       - 8505:3000
     environment:
-      - REACT_APP_API_URL=http://api:8504
+      - REACT_APP_API_URL=http://backend:8585
+
+  backend:
+    build:
+      context: .
+      dockerfile: back-end.Dockerfile
+    volumes:
+      - $PWD/embedding_model:/embedding_model
+    environment:
+      - NEO4J_URI=${NEO4J_URI-neo4j://database:7687}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD-password}
+      - NEO4J_USERNAME=${NEO4J_USERNAME-neo4j}
+      - SECRET_KEY=${SECRET_KEY-your-secret-key-should-be-changed-in-production}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL-http://host.docker.internal:11434}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL-sentence_transformer}
+    networks:
+      - net
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - 8585:8585
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8585/api/hello"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
 networks:
   net:
