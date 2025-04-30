@@ -47,17 +47,20 @@ def create_user_constraints():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: create constraints
+    print("Creating user constraints...")
     create_user_constraints()
+    print("User constraints created successfully")
     yield
     # Shutdown: nothing to do
 
 # FastAPI app
 app = FastAPI(title="Project Scribe Backend", lifespan=lifespan)
 
-# Add CORS middleware
+# Update CORS settings to be more specific
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["http://localhost:8505", "http://localhost:8585", 
+                  "http://127.0.0.1:8505", "http://127.0.0.1:8585", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -163,57 +166,71 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
 
 # API Endpoints
 @app.post("/register", response_model=User)
-async def register_user(user: UserCreate):
-    # Check if user already exists
-    existing_user = neo4j_graph.query(
-        """
-        MATCH (u:User) 
-        WHERE u.username = $username OR u.email = $email
-        RETURN u
-        """,
-        {"username": user.username, "email": user.email}
-    )
+async def register_user(user: UserCreate, request: Request):
+    print(f"Registration request received from: {request.client.host}")
+    print(f"Registration attempt for user: {user.username}, email: {user.email}")
     
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username or email already registered"
+    try:
+        # Check if user already exists
+        existing_user = neo4j_graph.query(
+            """
+            MATCH (u:User) 
+            WHERE u.username = $username OR u.email = $email
+            RETURN u
+            """,
+            {"username": user.username, "email": user.email}
         )
-    
-    # Create new user
-    hashed_password = get_password_hash(user.password)
-    
-    neo4j_graph.query(
-        """
-        CREATE (u:User {
-            username: $username, 
-            email: $email, 
-            full_name: $full_name, 
-            hashed_password: $hashed_password,
-            created_at: datetime(),
-            disabled: false
-        })
-        RETURN u
-        """,
-        {
+        
+        if existing_user:
+            print(f"User already exists: {user.username}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username or email already registered"
+            )
+        
+        # Create new user
+        hashed_password = get_password_hash(user.password)
+        
+        neo4j_graph.query(
+            """
+            CREATE (u:User {
+                username: $username, 
+                email: $email, 
+                full_name: $full_name, 
+                hashed_password: $hashed_password,
+                created_at: datetime(),
+                disabled: false
+            })
+            RETURN u
+            """,
+            {
+                "username": user.username,
+                "email": user.email,
+                "full_name": user.full_name,
+                "hashed_password": hashed_password
+            }
+        )
+        
+        print(f"User created successfully: {user.username}")
+        return {
             "username": user.username,
             "email": user.email,
             "full_name": user.full_name,
-            "hashed_password": hashed_password
+            "disabled": False
         }
-    )
-    
-    return {
-        "username": user.username,
-        "email": user.email,
-        "full_name": user.full_name,
-        "disabled": False
-    }
+    except Exception as e:
+        print(f"Error creating user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating user: {str(e)}"
+        )
 
 @app.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
+    print(f"Login attempt from: {request.client.host} for user: {form_data.username}")
     user = authenticate_user(form_data.username, form_data.password)
     if not user:
+        print(f"Login failed for user: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -223,6 +240,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
+    print(f"Login successful for user: {form_data.username}")
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.get("/users/me", response_model=User)
@@ -231,7 +249,8 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
 
 # Hello endpoint for testing
 @app.get("/api/hello")
-async def hello():
+async def hello(request: Request):
+    print(f"Hello endpoint accessed from: {request.client.host}")
     return {"message": "Welcome to Project Scribe API!"}
 
 if __name__ == "__main__":
