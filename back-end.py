@@ -43,13 +43,39 @@ def create_user_constraints():
     FOR (u:User) REQUIRE u.email IS UNIQUE
     """)
 
+# First, let's add a function to check if properties exist in Neo4j
+def ensure_property_exists(property_name):
+    # Check if property exists, create it if it doesn't
+    neo4j_graph.query(
+        """
+        CREATE (temp:PropertyCheck {
+          name: 'temp', 
+          %s: ''
+        })
+        """ % property_name
+    )
+    
+    # Clean up the temporary node
+    neo4j_graph.query(
+        """
+        MATCH (temp:PropertyCheck {name: 'temp'})
+        DELETE temp
+        """
+    )
+    print(f"Ensured property {property_name} exists in the database schema")
+
 # Lifespan context manager (replacing on_event)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: create constraints
     print("Creating user constraints...")
     create_user_constraints()
     print("User constraints created successfully")
+    
+    # Ensure all required properties exist in the schema
+    ensure_property_exists("full_name")
+    ensure_property_exists("disabled")
+    
+    print("Schema properties created successfully")
     yield
     # Shutdown: nothing to do
 
@@ -110,7 +136,8 @@ def get_user(username: str):
         """
         MATCH (u:User {username: $username}) 
         RETURN u.username as username, u.email as email, 
-               u.full_name as full_name, u.disabled as disabled, 
+               COALESCE(u.full_name, '') as full_name, 
+               COALESCE(u.disabled, false) as disabled, 
                u.hashed_password as hashed_password
         """,
         {"username": username}
@@ -191,6 +218,10 @@ async def register_user(user: UserCreate, request: Request):
         # Create new user
         hashed_password = get_password_hash(user.password)
         
+        # Ensure full_name is always a string
+        full_name = user.full_name if user.full_name is not None else ''
+        
+        # Use MERGE instead of CREATE to be more robust
         neo4j_graph.query(
             """
             CREATE (u:User {
@@ -206,7 +237,7 @@ async def register_user(user: UserCreate, request: Request):
             {
                 "username": user.username,
                 "email": user.email,
-                "full_name": user.full_name,
+                "full_name": full_name,
                 "hashed_password": hashed_password
             }
         )
@@ -215,7 +246,7 @@ async def register_user(user: UserCreate, request: Request):
         return {
             "username": user.username,
             "email": user.email,
-            "full_name": user.full_name,
+            "full_name": full_name,
             "disabled": False
         }
     except Exception as e:

@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
-import AuthService from './services/AuthService'; // Import AuthService
 
 // Helper component for protected routes
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
