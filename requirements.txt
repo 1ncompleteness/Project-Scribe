@@ -23,6 +23,6 @@ numpy
 
 # Authentication backend dependencies
 passlib==1.7.4
-python-jose==3.3.0
+python-jose==3.4.0
 python-multipart==0.0.6
 bcrypt==4.0.1
