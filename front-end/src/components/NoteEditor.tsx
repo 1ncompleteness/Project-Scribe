@@ -48,45 +48,62 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorderOptions = { mimeType: 'audio/webm' };
-      const recorder = new MediaRecorder(stream, recorderOptions);
       
-      // Clear previous audio chunks when starting a new recording
+      // Try different MIME types based on browser support
+      let mimeType = 'audio/webm';
+      if (!MediaRecorder.isTypeSupported('audio/webm')) {
+        if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4';
+        } else {
+          mimeType = '';
+        }
+      }
+      
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      
+      // Clear previous audio chunks
       setAudioChunks([]);
+      
+      // Use a local array to collect chunks during this recording session
+      const chunks: Blob[] = [];
       
       recorder.ondataavailable = (e) => {
         console.log('Audio data available:', e.data.size);
         if (e.data.size > 0) {
-          setAudioChunks((prev) => [...prev, e.data]);
+          // Add to local array immediately
+          chunks.push(e.data);
         }
       };
       
       recorder.onstop = () => {
-        console.log('Recording stopped, audio chunks:', audioChunks.length);
-        if (audioChunks.length === 0) {
+        console.log('Recording stopped, chunks collected:', chunks.length);
+        if (chunks.length === 0) {
           console.error('No audio chunks recorded');
           alert('No audio was recorded. Please try again.');
           return;
         }
         
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-        console.log('Audio blob created, size:', audioBlob.size);
-        const reader = new FileReader();
+        // Update state with all chunks collected
+        setAudioChunks(chunks);
         
+        const audioBlob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+        console.log('Audio blob created, size:', audioBlob.size);
+        
+        const reader = new FileReader();
         reader.onloadend = () => {
           const base64Audio = reader.result as string;
-          console.log('Audio converted to base64');
+          console.log('Audio converted to base64, length:', base64Audio.length);
           setAudioUrl(base64Audio);
         };
         
         reader.readAsDataURL(audioBlob);
       };
       
-      // Start recording with 100ms timeslices to get frequent ondataavailable events
+      // Start recording with shorter timeslices for more frequent chunks
       setMediaRecorder(recorder);
       setIsRecording(true);
-      recorder.start(100);
-      console.log('Recording started');
+      recorder.start(250);
+      console.log('Recording started with MIME type:', mimeType || 'default');
     } catch (err) {
       console.error('Error accessing microphone:', err);
       alert('Could not access microphone. Please ensure microphone permissions are enabled.');
