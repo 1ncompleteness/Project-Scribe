@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import AuthService from '../services/AuthService';
 
@@ -8,12 +8,22 @@ function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
+  // Check if already logged in
+  useEffect(() => {
+    if (localStorage.getItem('token')) {
+      navigate('/dashboard');
+    }
+  }, [navigate]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     try {
-      await AuthService.login({ username, password });
-      navigate('/dashboard'); // Redirect to dashboard on successful login
+      const response = await AuthService.login({ username, password });
+      console.log('Login successful, token received:', !!response.access_token);
+      
+      // Use React Router navigation instead of window.location
+      navigate('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Login failed. Please check your credentials.');
       console.error('Login error:', err);

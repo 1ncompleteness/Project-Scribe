@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
@@ -7,16 +7,45 @@ import DashboardPage from './pages/DashboardPage';
 // Helper component for protected routes
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   const token = localStorage.getItem('token');
-  // You might want more sophisticated token validation here in a real app
-  return token ? children : <Navigate to="/login" />;
+  const location = useLocation();
+  
+  if (!token) {
+    // Redirect to login but save the current location they were trying to access
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  
+  return children;
 };
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    // Check authentication status on mount and token changes
+    const checkAuth = () => {
+      const token = localStorage.getItem('token');
+      setIsAuthenticated(!!token);
+    };
+    
+    checkAuth();
+    
+    // Listen for storage events to handle token changes in other tabs
+    window.addEventListener('storage', checkAuth);
+    return () => window.removeEventListener('storage', checkAuth);
+  }, []);
+
+  // Show loading state if auth status is still being determined
+  if (isAuthenticated === null) {
+    return <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="text-xl">Loading...</div>
+    </div>;
+  }
+
   return (
     <Router>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" /> : <LoginPage />} />
+        <Route path="/register" element={isAuthenticated ? <Navigate to="/dashboard" /> : <RegisterPage />} />
         <Route
           path="/dashboard"
           element={
@@ -28,9 +57,9 @@ function App() {
         {/* Redirect root path to login or dashboard based on auth status */}
         <Route
           path="/"
-          element={localStorage.getItem('token') ? <Navigate to="/dashboard" /> : <Navigate to="/login" />}
+          element={isAuthenticated ? <Navigate to="/dashboard" /> : <Navigate to="/login" />}
         />
-         {/* Catch-all route for unknown paths */}
+        {/* Catch-all route for unknown paths */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>
