@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AuthService from '../services/AuthService';
-import NoteService, { Note, Journal } from '../services/NoteService';
+import NoteService, { Note, Journal, NoteContent } from '../services/NoteService';
+import NoteEditor from '../components/NoteEditor';
 
 interface UserData {
   username: string;
@@ -18,10 +19,8 @@ function DashboardPage() {
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [selectedJournal, setSelectedJournal] = useState<Journal | null>(null);
   const [isCreatingNote, setIsCreatingNote] = useState(false);
+  const [isEditingNote, setIsEditingNote] = useState(false);
   const [isCreatingJournal, setIsCreatingJournal] = useState(false);
-  const [noteTitle, setNoteTitle] = useState('');
-  const [noteContent, setNoteContent] = useState('');
-  const [noteTags, setNoteTags] = useState('');
   const [journalTitle, setJournalTitle] = useState('');
   const [journalDescription, setJournalDescription] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -90,17 +89,14 @@ function DashboardPage() {
   };
 
   // Note CRUD operations
-  const createNote = async () => {
+  const createNote = async (title: string, content: NoteContent, tags: string[]) => {
     try {
       setIsLoading(true);
       const noteData = {
-        title: noteTitle,
-        content: {
-          text: noteContent,
-          images: []
-        },
+        title: title,
+        content: content,
         journal_id: selectedJournal?.id,
-        tags: noteTags.split(',').map(tag => tag.trim()).filter(tag => tag)
+        tags: tags
       };
 
       const response = await NoteService.createNote(noteData);
@@ -112,10 +108,6 @@ function DashboardPage() {
         setNotes(prevNotes => [response.data, ...prevNotes]);
       }
       
-      // Reset form
-      setNoteTitle('');
-      setNoteContent('');
-      setNoteTags('');
       setIsCreatingNote(false);
       setIsLoading(false);
     } catch (err) {
@@ -125,27 +117,27 @@ function DashboardPage() {
     }
   };
 
-  const updateNote = async (note: Note, updatedContent?: string) => {
+  const handleSaveNote = async (title: string, content: NoteContent, tags: string[]) => {
     try {
       setIsLoading(true);
-      const updateData: any = {};
       
-      if (updatedContent !== undefined) {
-        updateData.content = {
-          ...note.content,
-          text: updatedContent
+      if (selectedNote) {
+        // Updating existing note
+        const updateData = {
+          title,
+          content,
+          tags
         };
-      }
-      
-      const response = await NoteService.updateNote(note.id, updateData);
-      
-      // Update notes list
-      setNotes(prevNotes =>
-        prevNotes.map(n => (n.id === note.id ? response.data : n))
-      );
-      
-      if (selectedNote?.id === note.id) {
+        
+        const response = await NoteService.updateNote(selectedNote.id, updateData);
+        
+        // Update notes list
+        setNotes(prevNotes =>
+          prevNotes.map(n => (n.id === selectedNote.id ? response.data : n))
+        );
+        
         setSelectedNote(response.data);
+        setIsEditingNote(false);
       }
       
       setIsLoading(false);
@@ -374,79 +366,26 @@ function DashboardPage() {
 
             {/* Main content area */}
             <div className="col-span-12 md:col-span-8 lg:col-span-9">
-              {isCreatingNote ? (
-                <div className="bg-white rounded-lg shadow-md p-6">
-                  <h2 className="text-xl font-semibold mb-4">Create New Note</h2>
-                  <div className="mb-4">
-                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="title">
-                      Title
-                    </label>
-                    <input
-                      id="title"
-                      type="text"
-                      value={noteTitle}
-                      onChange={(e) => setNoteTitle(e.target.value)}
-                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                      placeholder="Note title"
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="content">
-                      Content
-                    </label>
-                    <textarea
-                      id="content"
-                      value={noteContent}
-                      onChange={(e) => setNoteContent(e.target.value)}
-                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline h-64"
-                      placeholder="Write your note here..."
-                    />
-                  </div>
-                  <div className="mb-6">
-                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="tags">
-                      Tags (comma separated)
-                    </label>
-                    <input
-                      id="tags"
-                      type="text"
-                      value={noteTags}
-                      onChange={(e) => setNoteTags(e.target.value)}
-                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                      placeholder="tag1, tag2, tag3"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <button
-                      onClick={() => setIsCreatingNote(false)}
-                      className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={createNote}
-                      disabled={!noteTitle || !noteContent}
-                      className={`${
-                        !noteTitle || !noteContent
-                          ? 'bg-blue-300 cursor-not-allowed'
-                          : 'bg-blue-500 hover:bg-blue-700'
-                      } text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline`}
-                    >
-                      Create Note
-                    </button>
-                  </div>
-                </div>
+              {isEditingNote && selectedNote ? (
+                <NoteEditor
+                  note={selectedNote}
+                  journalId={selectedJournal?.id}
+                  onSave={handleSaveNote}
+                  onCancel={() => setIsEditingNote(false)}
+                />
+              ) : isCreatingNote ? (
+                <NoteEditor
+                  journalId={selectedJournal?.id}
+                  onSave={createNote}
+                  onCancel={() => setIsCreatingNote(false)}
+                />
               ) : selectedNote ? (
                 <div className="bg-white rounded-lg shadow-md p-6">
                   <div className="flex justify-between items-start mb-4">
                     <h2 className="text-2xl font-semibold">{selectedNote.title}</h2>
                     <div className="flex space-x-2">
                       <button
-                        onClick={() => {
-                          const newContent = prompt("Edit note content:", selectedNote.content.text);
-                          if (newContent !== null && newContent !== selectedNote.content.text) {
-                            updateNote(selectedNote, newContent);
-                          }
-                        }}
+                        onClick={() => setIsEditingNote(true)}
                         className="text-blue-500 hover:text-blue-700 mr-2"
                       >
                         Edit
@@ -477,8 +416,8 @@ function DashboardPage() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-white rounded-lg shadow-md p-6 flex items-center justify-center h-64">
-                  <p className="text-gray-500">Select a note to view or create a new one</p>
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <p className="text-gray-500">Select a note from the list to view its content, or create a new note.</p>
                 </div>
               )}
             </div>
