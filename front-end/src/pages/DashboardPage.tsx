@@ -432,13 +432,15 @@ function DashboardPage() {
                   {selectedNote.content && selectedNote.content.images && selectedNote.content.images.length > 0 && (
                     <div className="mb-4">
                       <h3 className="font-medium text-gray-700 mb-2">Images</h3>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {selectedNote.content.images.map((image, index) => (
                           <div key={index} className="relative">
                             <img
                               src={image}
                               alt={`Item ${index + 1}`}
-                              className="w-full h-32 object-cover rounded"
+                              className="w-full max-h-96 object-contain rounded cursor-pointer"
+                              onClick={() => window.open(image, '_blank')}
+                              title="Click to view full size"
                             />
                           </div>
                         ))}

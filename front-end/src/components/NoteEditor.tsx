@@ -48,37 +48,54 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const recorderOptions = { mimeType: 'audio/webm' };
+      const recorder = new MediaRecorder(stream, recorderOptions);
+      
+      // Clear previous audio chunks when starting a new recording
+      setAudioChunks([]);
       
       recorder.ondataavailable = (e) => {
+        console.log('Audio data available:', e.data.size);
         if (e.data.size > 0) {
           setAudioChunks((prev) => [...prev, e.data]);
         }
       };
       
       recorder.onstop = () => {
-        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        console.log('Recording stopped, audio chunks:', audioChunks.length);
+        if (audioChunks.length === 0) {
+          console.error('No audio chunks recorded');
+          alert('No audio was recorded. Please try again.');
+          return;
+        }
+        
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        console.log('Audio blob created, size:', audioBlob.size);
         const reader = new FileReader();
         
         reader.onloadend = () => {
           const base64Audio = reader.result as string;
+          console.log('Audio converted to base64');
           setAudioUrl(base64Audio);
         };
         
         reader.readAsDataURL(audioBlob);
       };
       
+      // Start recording with 100ms timeslices to get frequent ondataavailable events
       setMediaRecorder(recorder);
       setIsRecording(true);
-      recorder.start();
+      recorder.start(100);
+      console.log('Recording started');
     } catch (err) {
       console.error('Error accessing microphone:', err);
-      alert('Could not access microphone');
+      alert('Could not access microphone. Please ensure microphone permissions are enabled.');
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorder) {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      console.log('Stopping recording...');
       mediaRecorder.stop();
       setIsRecording(false);
       // Stop all tracks on the stream
@@ -231,15 +248,26 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
             )}
           </div>
         ) : (
-          <div className="flex items-center">
-            <audio controls src={audioUrl} className="mr-2"></audio>
-            <button
-              type="button"
-              onClick={deleteAudio}
-              className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded"
-            >
-              Delete
-            </button>
+          <div className="flex flex-col">
+            <div className="flex items-center mb-2">
+              <audio controls src={audioUrl} className="w-full mr-2"></audio>
+            </div>
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={deleteAudio}
+                className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded mr-2"
+              >
+                Delete Recording
+              </button>
+              <button
+                type="button"
+                onClick={startRecording}
+                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded"
+              >
+                Record Again
+              </button>
+            </div>
           </div>
         )}
       </div>
