@@ -238,6 +238,17 @@ function DashboardPage() {
     setNotes(notesResponse.data);
   };
 
+  // Debug function to check note structure
+  useEffect(() => {
+    if (selectedNote) {
+      console.log('Selected note:', selectedNote);
+      console.log('Note content:', selectedNote.content);
+      console.log('Note images:', selectedNote.content.images);
+      console.log('Note audio:', selectedNote.content.audio);
+      console.log('Note tags:', selectedNote.tags);
+    }
+  }, [selectedNote]);
+
   if (error) {
     return <div className="min-h-screen bg-gray-100 flex items-center justify-center"><p className="text-red-500">{error}</p></div>;
   }
@@ -398,9 +409,14 @@ function DashboardPage() {
                       </button>
                     </div>
                   </div>
+                  
+                  {/* Text content */}
                   <div className="mb-4 whitespace-pre-wrap">{selectedNote.content.text}</div>
-                  {selectedNote.tags.length > 0 && (
+                  
+                  {/* Display tags */}
+                  {selectedNote.tags && selectedNote.tags.length > 0 && (
                     <div className="flex flex-wrap mb-4">
+                      <h3 className="font-medium text-gray-700 w-full mb-2">Tags</h3>
                       {selectedNote.tags.map((tag) => (
                         <span
                           key={tag}
@@ -411,6 +427,33 @@ function DashboardPage() {
                       ))}
                     </div>
                   )}
+                  
+                  {/* Display images */}
+                  {selectedNote.content && selectedNote.content.images && selectedNote.content.images.length > 0 && (
+                    <div className="mb-4">
+                      <h3 className="font-medium text-gray-700 mb-2">Images</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        {selectedNote.content.images.map((image, index) => (
+                          <div key={index} className="relative">
+                            <img
+                              src={image}
+                              alt={`Item ${index + 1}`}
+                              className="w-full h-32 object-cover rounded"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Display audio */}
+                  {selectedNote.content && selectedNote.content.audio && (
+                    <div className="mb-4">
+                      <h3 className="font-medium text-gray-700 mb-2">Audio</h3>
+                      <audio controls src={selectedNote.content.audio} className="w-full"></audio>
+                    </div>
+                  )}
+                  
                   <div className="text-gray-500 text-sm">
                     Updated {new Date(selectedNote.updated_at).toLocaleString()}
                   </div>

@@ -32,7 +32,7 @@ apiClient.interceptors.request.use(
 // Types
 export interface NoteContent {
   text: string;
-  images: string[]; // Base64 encoded images
+  images?: string[]; // Base64 encoded images
   audio?: string; // Base64 encoded audio
 }
 
@@ -84,11 +84,40 @@ export interface JournalUpdateRequest {
 
 // Note API methods
 const getNotes = () => {
-  return apiClient.get<Note[]>('/api/notes');
+  return apiClient.get<Note[]>('/api/notes').then(response => {
+    // Ensure all notes have the required properties
+    const processedNotes = response.data.map(note => ({
+      ...note,
+      content: {
+        text: note.content.text || '',
+        images: note.content.images || [],
+        audio: note.content.audio
+      },
+      tags: note.tags || []
+    }));
+    return {
+      ...response,
+      data: processedNotes
+    };
+  });
 };
 
 const getNote = (id: string) => {
-  return apiClient.get<Note>(`/api/notes/${id}`);
+  return apiClient.get<Note>(`/api/notes/${id}`).then(response => {
+    const processedNote = {
+      ...response.data,
+      content: {
+        text: response.data.content.text || '',
+        images: response.data.content.images || [],
+        audio: response.data.content.audio
+      },
+      tags: response.data.tags || []
+    };
+    return {
+      ...response,
+      data: processedNote
+    };
+  });
 };
 
 const createNote = (noteData: NoteCreateRequest) => {
@@ -113,7 +142,22 @@ const getJournal = (id: string) => {
 };
 
 const getJournalNotes = (id: string) => {
-  return apiClient.get<Note[]>(`/api/journals/${id}/notes`);
+  return apiClient.get<Note[]>(`/api/journals/${id}/notes`).then(response => {
+    // Ensure all notes have the required properties
+    const processedNotes = response.data.map(note => ({
+      ...note,
+      content: {
+        text: note.content.text || '',
+        images: note.content.images || [],
+        audio: note.content.audio
+      },
+      tags: note.tags || []
+    }));
+    return {
+      ...response,
+      data: processedNotes
+    };
+  });
 };
 
 const createJournal = (journalData: JournalCreateRequest) => {
