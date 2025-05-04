@@ -249,28 +249,23 @@ services:
     build:
       context: .
       dockerfile: back-end.Dockerfile
-    volumes:
-      - $PWD/embedding_model:/embedding_model
+    networks:
+      - net
+    ports:
+      - 8585:8585
     environment:
       - NEO4J_URI=${NEO4J_URI-neo4j://database:7687}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD-password}
       - NEO4J_USERNAME=${NEO4J_USERNAME-neo4j}
-      - SECRET_KEY=${SECRET_KEY-your-secret-key-should-be-changed-in-production}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL-http://host.docker.internal:11434}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL-sentence_transformer}
-    networks:
-      - net
+      - SECRET_KEY=${SECRET_KEY-your-secret-key}
     depends_on:
       database:
         condition: service_healthy
-    ports:
-      - 8585:8585
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8585/api/hello"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD-SHELL", "curl -f http://localhost:8585/api/hello || exit 1"]
+      interval: 10s
+      timeout: 5s
       retries: 5
-      start_period: 30s
 
 networks:
   net:

@@ -82,6 +82,26 @@ def ensure_property_exists(property_name):
     )
     print(f"Ensured property {property_name} exists in the database schema")
 
+# Add a function to ensure relationships exist in Neo4j
+def ensure_relationship_exists(relationship_type):
+    # Create a temporary relationship to ensure it exists in the schema
+    neo4j_graph.query(
+        f"""
+        CREATE (a:RelationshipCheck {{name: 'source'}})
+        CREATE (b:RelationshipCheck {{name: 'target'}})
+        CREATE (a)-[:{relationship_type}]->(b)
+        """
+    )
+    
+    # Clean up temporary nodes and relationships
+    neo4j_graph.query(
+        """
+        MATCH (n:RelationshipCheck)
+        DETACH DELETE n
+        """
+    )
+    print(f"Ensured relationship {relationship_type} exists in the database schema")
+
 # Function to initialize the database with sample data
 def initialize_database():
     print("Checking if database needs initialization...")
@@ -239,7 +259,13 @@ async def lifespan(app: FastAPI):
         ensure_property_exists("note_count")
         ensure_property_exists("template")
         
-        print("Schema properties created successfully")
+        # Ensure relationships exist in the schema
+        print("Ensuring relationships exist...")
+        ensure_relationship_exists("CREATED_BY")
+        ensure_relationship_exists("OWNED_BY")
+        ensure_relationship_exists("BELONGS_TO")
+        
+        print("Schema properties and relationships created successfully")
         
         # Initialize database with sample data
         print("Starting database initialization...")
@@ -527,6 +553,9 @@ async def create_note(note_data: NoteCreate, current_user: User = Depends(get_cu
                 detail="Journal not found or you don't have access to it"
             )
     
+    # Serialize content to JSON string
+    content_json = json.dumps(note_data.content.model_dump())
+    
     # Create note
     neo4j_graph.query(
         """
@@ -545,7 +574,7 @@ async def create_note(note_data: NoteCreate, current_user: User = Depends(get_cu
         {
             "id": note_id,
             "title": note_data.title,
-            "content": note_data.content.model_dump(),
+            "content": content_json,
             "timestamp": current_time,
             "tags": note_data.tags,
             "username": current_user.username
@@ -599,11 +628,7 @@ async def get_notes(current_user: User = Depends(get_current_active_user)):
     result = []
     for note in notes:
         # Convert content from string/dict to NoteContent model
-        if isinstance(note["content"], str):
-            import json
-            content_dict = json.loads(note["content"])
-        else:
-            content_dict = note["content"]
+        content_dict = deserialize_json_field(note["content"])
             
         note_content = NoteContent(**content_dict)
         
@@ -640,11 +665,7 @@ async def get_note(note_id: str, current_user: User = Depends(get_current_active
     note = result[0]
     
     # Convert content from string/dict to NoteContent model
-    if isinstance(note["content"], str):
-        import json
-        content_dict = json.loads(note["content"])
-    else:
-        content_dict = note["content"]
+    content_dict = deserialize_json_field(note["content"])
         
     note_content = NoteContent(**content_dict)
     
@@ -661,6 +682,7 @@ async def get_note(note_id: str, current_user: User = Depends(get_current_active
 @app.put("/api/notes/{note_id}", response_model=Note)
 async def update_note(note_id: str, note_update: NoteUpdate, current_user: User = Depends(get_current_active_user)):
     # Verify note exists and belongs to user
+    import json  # Local import to ensure it's available
     result = neo4j_graph.query(
         """
         MATCH (n:Note {id: $note_id})-[:CREATED_BY]->(u:User {username: $username})
@@ -679,20 +701,14 @@ async def update_note(note_id: str, note_update: NoteUpdate, current_user: User 
     
     current_note = result[0]
     
-    # Handle content update
-    if isinstance(current_note["content"], str):
-        import json
-        current_content = json.loads(current_note["content"])
-    else:
-        current_content = current_note["content"]
-    
     # Update note fields
     update_data = {}
     if note_update.title:
         update_data["title"] = note_update.title
     
     if note_update.content:
-        update_data["content"] = note_update.content.model_dump()
+        # Serialize content to JSON string
+        update_data["content"] = json.dumps(note_update.content.model_dump())
     
     if note_update.tags is not None:
         update_data["tags"] = note_update.tags
@@ -847,6 +863,9 @@ async def create_journal(journal_data: JournalCreate, current_user: User = Depen
     journal_id = str(uuid.uuid4())
     current_time = datetime.utcnow().isoformat()
     
+    # Serialize template to JSON string if it's provided
+    template_json = json.dumps(journal_data.template or {})
+    
     # Create journal
     neo4j_graph.query(
         """
@@ -868,7 +887,7 @@ async def create_journal(journal_data: JournalCreate, current_user: User = Depen
             "title": journal_data.title,
             "description": journal_data.description or "",
             "timestamp": current_time,
-            "template": journal_data.template or {},
+            "template": template_json,
             "username": current_user.username
         }
     )
@@ -896,6 +915,11 @@ async def get_journals(current_user: User = Depends(get_current_active_user)):
         {"username": current_user.username}
     )
     
+    # Deserialize template fields
+    for journal in journals:
+        if "template" in journal and journal["template"]:
+            journal["template"] = deserialize_json_field(journal["template"])
+    
     return journals
 
 @app.get("/api/journals/{journal_id}", response_model=Journal)
@@ -916,7 +940,13 @@ async def get_journal(journal_id: str, current_user: User = Depends(get_current_
             detail="Journal not found or you don't have access to it"
         )
     
-    return result[0]
+    journal = result[0]
+    
+    # Deserialize the template if it's stored as a JSON string
+    if "template" in journal and journal["template"]:
+        journal["template"] = deserialize_json_field(journal["template"])
+    
+    return journal
 
 @app.get("/api/journals/{journal_id}/notes", response_model=List[Note])
 async def get_journal_notes(journal_id: str, current_user: User = Depends(get_current_active_user)):
@@ -951,11 +981,7 @@ async def get_journal_notes(journal_id: str, current_user: User = Depends(get_cu
     result = []
     for note in notes:
         # Convert content from string/dict to NoteContent model
-        if isinstance(note["content"], str):
-            import json
-            content_dict = json.loads(note["content"])
-        else:
-            content_dict = note["content"]
+        content_dict = deserialize_json_field(note["content"])
             
         note_content = NoteContent(**content_dict)
         
@@ -971,9 +997,19 @@ async def get_journal_notes(journal_id: str, current_user: User = Depends(get_cu
     
     return result
 
+def deserialize_json_field(field_value):
+    """Convert a JSON string to a dictionary if it's a string, or return as is if it's already a dict."""
+    if isinstance(field_value, str):
+        try:
+            return json.loads(field_value)
+        except:
+            return field_value
+    return field_value
+
 @app.put("/api/journals/{journal_id}", response_model=Journal)
 async def update_journal(journal_id: str, journal_update: JournalUpdate, current_user: User = Depends(get_current_active_user)):
     # Verify journal exists and belongs to user
+    import json  # Local import to ensure it's available
     result = neo4j_graph.query(
         """
         MATCH (j:Journal {id: $journal_id})-[:OWNED_BY]->(u:User {username: $username})
@@ -997,7 +1033,8 @@ async def update_journal(journal_id: str, journal_update: JournalUpdate, current
         update_data["description"] = journal_update.description
     
     if journal_update.template is not None:
-        update_data["template"] = journal_update.template
+        # Serialize template to JSON string
+        update_data["template"] = json.dumps(journal_update.template)
     
     # Update journal in Neo4j
     update_cypher = """
@@ -1030,6 +1067,10 @@ async def update_journal(journal_id: str, journal_update: JournalUpdate, current
         """,
         {"journal_id": journal_id}
     )[0]
+    
+    # Deserialize the template if it's stored as a JSON string
+    if "template" in updated_journal and updated_journal["template"]:
+        updated_journal["template"] = deserialize_json_field(updated_journal["template"])
     
     return updated_journal
 
