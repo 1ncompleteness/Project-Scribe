@@ -531,18 +531,18 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({
               rows={3}
             />
             
-            <div className="mt-2">
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+            <div className="mt-4">
+              <label className="block text-xs font-medium text-gray-700 mb-2">
                 System Prompt <span className="text-xs text-gray-500">(Advanced)</span>
               </label>
               <textarea
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
                 placeholder="Custom instructions for the AI"
-                className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-xs border-gray-300 rounded-md"
-                rows={2}
+                className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-xs border-gray-300 rounded-md p-3"
+                rows={3}
               />
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-gray-500 mt-2 mb-1">
                 Customize how AGNIS responds to your questions
               </p>
             </div>
@@ -887,9 +887,9 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({
           {/* Application Information */}
           <div>
             <h4 className="text-sm font-semibold text-gray-600 mb-3 pb-1 border-b">About</h4>
-            <p className="text-sm text-gray-600 mb-1">Project Scribe v1.0.0</p>
+            <p className="text-sm text-gray-600 mb-1">AGNIS v0.9.9 Alpha</p>
             <p className="text-xs text-gray-500">
-              A powerful note-taking and knowledge management application with AI capabilities.
+            Artificial Generative Notation & Indexing System for knowledge management, note organization, and AI-assisted content creation.
             </p>
           </div>
         </div>
