@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import AGNISService, { SearchResult, SummaryResponse, TemplateResponse } from "../services/AGNISService";
 
 export interface AGNISSidebarProps {
@@ -33,11 +33,15 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
   const [noteDetails, setNoteDetails] = useState("");
   const [template, setTemplate] = useState<TemplateResponse | null>(null);
   const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false);
-  const [commonNoteTypes, setCommonNoteTypes] = useState([
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const [errorTimer, setErrorTimer] = useState<NodeJS.Timeout | null>(null);
+  
+  // Use a constant array instead of state since we don't need to update it
+  const commonNoteTypes = [
     'Meeting Notes', 'Project Plan', 'Research Notes', 'Journal Entry',
     'Book Notes', 'Lecture Notes', 'To-Do List', 'Decision Log',
     'Learning Notes', 'Creative Writing', 'Recipe', 'Travel Itinerary'
-  ]);
+  ];
   
   const answerRef = useRef<HTMLDivElement>(null);
   
@@ -161,20 +165,36 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
   
   // Template generation function
   const handleGenerateTemplate = async () => {
-    if (!noteType.trim()) {
-      alert('Please enter a note type');
+    // Trim the note type to ensure we're checking correctly
+    const trimmedNoteType = noteType.trim();
+    
+    if (!trimmedNoteType) {
+      setTemplateError('Please enter a note type');
       return;
+    }
+    
+    // Clear any existing error timers
+    if (errorTimer) {
+      clearTimeout(errorTimer);
+      setErrorTimer(null);
     }
     
     setIsGeneratingTemplate(true);
     setTemplate(null);
+    setTemplateError(null);
     
     try {
-      const response = await AGNISService.generateTemplate(noteType, noteDetails);
+      const response = await AGNISService.generateTemplate(trimmedNoteType, noteDetails);
       setTemplate(response.data);
     } catch (error) {
       console.error("Template generation error:", error);
-      alert("Failed to generate template. Please try again.");
+      
+      // Set a timer to show the error after a delay
+      const timer = setTimeout(() => {
+        setTemplateError("Failed to generate template. Please try again.");
+      }, 2000); // 2-second delay before showing error
+      
+      setErrorTimer(timer);
     } finally {
       setIsGeneratingTemplate(false);
     }
@@ -193,12 +213,36 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
   };
   
   const handleQuickNoteType = (type: string) => {
+    // Clear any existing error timers
+    if (errorTimer) {
+      clearTimeout(errorTimer);
+      setErrorTimer(null);
+    }
+    
+    // Make sure the type is valid
+    if (!type || !type.trim()) {
+      return;
+    }
+    
+    // Update note type state
     setNoteType(type);
-    // Automatically trigger template generation when selecting a common type
+    setTemplateError(null);
+    
+    // Delay template generation to ensure state is updated
     setTimeout(() => {
       handleGenerateTemplate();
     }, 100);
   };
+
+  // Update component cleanup to clear any timers
+  useEffect(() => {
+    return () => {
+      // Clear any active timers when component unmounts
+      if (errorTimer) {
+        clearTimeout(errorTimer);
+      }
+    };
+  }, [errorTimer]);
 
   return (
     <div className="bg-white rounded-lg shadow-md h-full overflow-hidden flex flex-col">
@@ -210,7 +254,7 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
       {/* Tabs */}
       <div className="flex border-b border-gray-200">
         <button
-          className={`flex-1 py-2 px-4 text-sm font-medium ${
+          className={`flex-1 py-2 px-2 text-xs sm:text-sm font-medium ${
             activeTab === 'search' 
               ? 'text-blue-600 border-b-2 border-blue-500' 
               : 'text-gray-500 hover:text-gray-700'
@@ -220,7 +264,7 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
           Search
         </button>
         <button
-          className={`flex-1 py-2 px-4 text-sm font-medium ${
+          className={`flex-1 py-2 px-2 text-xs sm:text-sm font-medium ${
             activeTab === 'ask' 
               ? 'text-blue-600 border-b-2 border-blue-500' 
               : 'text-gray-500 hover:text-gray-700'
@@ -230,7 +274,7 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
           Ask
         </button>
         <button
-          className={`flex-1 py-2 px-4 text-sm font-medium ${
+          className={`flex-1 py-2 px-2 text-xs sm:text-sm font-medium ${
             activeTab === 'template' 
               ? 'text-blue-600 border-b-2 border-blue-500' 
               : 'text-gray-500 hover:text-gray-700'
@@ -240,14 +284,14 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
           Template
         </button>
         <button
-          className={`flex-1 py-2 px-4 text-sm font-medium ${
+          className={`flex-1 py-2 px-2 text-xs sm:text-sm font-medium ${
             activeTab === 'summarize' 
               ? 'text-blue-600 border-b-2 border-blue-500' 
               : 'text-gray-500 hover:text-gray-700'
           }`}
           onClick={() => setActiveTab('summarize')}
         >
-          Summarize
+          Summary
         </button>
       </div>
       
@@ -412,7 +456,10 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
             <input
               type="text"
               value={noteType}
-              onChange={(e) => setNoteType(e.target.value)}
+              onChange={(e) => {
+                setNoteType(e.target.value);
+                setTemplateError(null);
+              }}
               placeholder="E.g., Meeting Notes, Project Plan, Research Notes..."
               className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
             />
@@ -445,6 +492,12 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
               rows={2}
             />
           </div>
+          
+          {templateError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
+              {templateError}
+            </div>
+          )}
           
           <button
             onClick={handleGenerateTemplate}
