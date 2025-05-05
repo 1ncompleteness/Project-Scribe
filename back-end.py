@@ -26,33 +26,38 @@ import logging
 import requests
 
 # Instead, define the create_vector_index function directly here
-def create_vector_index(driver) -> None:
-    index_query = "CREATE VECTOR INDEX stackoverflow IF NOT EXISTS FOR (m:Question) ON m.embedding"
-    try:
-        driver.query(index_query)
-    except:  # Already exists
-        pass
-    index_query = (
-        "CREATE VECTOR INDEX top_answers IF NOT EXISTS FOR (m:Answer) ON m.embedding"
-    )
-    try:
-        driver.query(index_query)
-    except:  # Already exists
-        pass
+def create_vector_index(graph: Neo4jGraph) -> None:
+    # Remove old/unused indices
+    # index_query = "CREATE VECTOR INDEX stackoverflow IF NOT EXISTS FOR (m:Question) ON m.embedding"
+    # try:
+    #     driver.query(index_query)
+    # except Exception as e:
+    #     print(f"Error creating index stackoverflow (potentially harmless if already exists): {e}")
+    # index_query = (
+    #     "CREATE VECTOR INDEX top_answers IF NOT EXISTS FOR (m:Answer) ON m.embedding"
+    # )
+    # try:
+    #     driver.query(index_query)
+    # except Exception as e:
+    #     print(f"Error creating index top_answers (potentially harmless if already exists): {e}")
     
     # Additional index for notes
-    index_query = "CREATE VECTOR INDEX notes_vector IF NOT EXISTS FOR (n:Note) ON n.embedding"
+    index_query_notes = "CREATE VECTOR INDEX notes_vector IF NOT EXISTS FOR (n:Note) ON (n.embedding)"
     try:
-        driver.query(index_query)
-    except:  # Already exists
-        pass
-        
+        print(f"Attempting to execute query: {index_query_notes}")
+        graph.query(index_query_notes)
+        print("Successfully created or verified 'notes_vector' index.")
+    except Exception as e:
+        print(f"ERROR creating 'notes_vector' index: {e}")
+
     # Index for journals
-    index_query = "CREATE VECTOR INDEX journals_vector IF NOT EXISTS FOR (j:Journal) ON j.embedding"
+    index_query_journals = "CREATE VECTOR INDEX journals_vector IF NOT EXISTS FOR (j:Journal) ON (j.embedding)"
     try:
-        driver.query(index_query)
-    except:  # Already exists
-        pass
+        print(f"Attempting to execute query: {index_query_journals}")
+        graph.query(index_query_journals)
+        print("Successfully created or verified 'journals_vector' index.")
+    except Exception as e:
+        print(f"ERROR creating 'journals_vector' index: {e}")
 
 # Add a simple logger class to avoid utils dependency
 class BaseLogger:
@@ -330,7 +335,11 @@ async def lifespan(app: FastAPI):
         create_note_constraints()
         create_journal_constraints()
         print("Constraints created successfully")
-    
+        
+        print("Creating vector indices...")
+        create_vector_index(neo4j_graph)
+        print("Vector indices created successfully")
+        
         # Ensure all required properties exist in the schema
         print("Ensuring properties exist...")
         ensure_property_exists("full_name")
@@ -1676,6 +1685,153 @@ async def migrate_generate_all_embeddings(current_user: User = Depends(get_curre
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error starting migration: {str(e)}"
         )
+
+# Question Answering Endpoint (Streaming)
+@app.get("/api/query-stream")
+async def query_stream(
+    text: str,
+    system_prompt: Optional[str] = "You are a helpful assistant.",
+    rag: bool = True,
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Handles querying the LLM with optional RAG context, streaming the response.
+    """
+    print(f"Received query: text='{text}', rag={rag}, system_prompt='{system_prompt}'")
+
+    async def event_generator():
+        context = ""
+        sources = []
+
+        if rag:
+            print("Performing RAG search...")
+            try:
+                # Use semantic search to find relevant context
+                query_embedding = embedding_model.embed_query(text)
+
+                # Search notes using vector index
+                note_results = neo4j_graph.query(
+                    """
+                    CALL db.index.vector.queryNodes('notes_vector', $top_k, $query_embedding) YIELD node, score
+                    MATCH (node)-[:CREATED_BY]->(u:User {username: $username})
+                    WHERE score > 0.7  // Adjust threshold as needed
+                    RETURN node.id as id, node.title as title, node.content as content, score
+                    ORDER BY score DESC
+                    LIMIT 3
+                    """,
+                    {
+                        "username": current_user.username,
+                        "query_embedding": query_embedding,
+                        "top_k": 5 # Ask for more results initially, then filter by score and limit
+                    }
+                )
+
+                # Search journals using vector index
+                journal_results = neo4j_graph.query(
+                    """
+                    CALL db.index.vector.queryNodes('journals_vector', $top_k, $query_embedding) YIELD node, score
+                    MATCH (node)-[:OWNED_BY]->(u:User {username: $username})
+                    WHERE score > 0.7  // Adjust threshold as needed
+                    RETURN node.id as id, node.title as title, node.description as description, score
+                    ORDER BY score DESC
+                    LIMIT 2
+                    """,
+                    {
+                        "username": current_user.username,
+                        "query_embedding": query_embedding,
+                        "top_k": 3
+                    }
+                )
+
+                context_items = []
+                for res in note_results:
+                    content_dict = deserialize_json_field(res["content"])
+                    text_content = content_dict.get("text", "")
+                    context_items.append(f"Note Title: {res['title']}\nContent: {text_content}")
+                    sources.append({"id": res["id"], "type": "note", "title": res["title"]})
+
+                for res in journal_results:
+                    description = res.get("description", "")
+                    context_items.append(f"Journal Title: {res['title']}\nDescription: {description}")
+                    sources.append({"id": res["id"], "type": "journal", "title": res["title"]})
+
+                if context_items:
+                    # Correctly join context items
+                    context = "\n\n---\n\n".join(context_items)
+                    print(f"Found RAG context: {len(context_items)} items.")
+                else:
+                    print("No relevant RAG context found.")
+
+                # Send sources info first
+                yield json.dumps({"type": "sources", "data": sources}) + "\n\n"
+
+            except Exception as e:
+                print(f"Error during RAG search: {e}")
+                # Continue without context if RAG fails
+
+        # Prepare messages for Ollama (use chat endpoint format)
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+
+        # Simplify prompt construction
+        if context:
+            user_content = f"Context:\n{context}\n\nQuestion: {text}"
+            messages.append({"role": "user", "content": user_content})
+        else:
+            messages.append({"role": "user", "content": text})
+
+        # Call Ollama API
+        ollama_url = os.getenv("OLLAMA_API_URL", "http://host.docker.internal:11434/api/chat")
+        payload = {
+            "model": os.getenv("OLLAMA_MODEL", "llama3"),
+            "messages": messages,
+            "stream": True
+        }
+
+        print(f"Sending request to Ollama: {ollama_url}")
+        try:
+            response = requests.post(ollama_url, json=payload, stream=True, timeout=60) # Add timeout
+            response.raise_for_status()
+
+            print("Streaming response from Ollama...")
+            for line in response.iter_lines():
+                if line:
+                    try:
+                        chunk = json.loads(line)
+                        if chunk.get("done") is not True:
+                            message_chunk = chunk.get("message", {}).get("content", "")
+                            if message_chunk:
+                                yield json.dumps({"type": "message", "data": message_chunk}) + "\n\n"
+                        else:
+                            final_info = chunk.get("total_duration")
+                            if final_info:
+                                yield json.dumps({"type": "final", "data": {"duration": final_info}}) + "\n\n"
+                            print("Ollama stream finished.")
+                            break
+                    except json.JSONDecodeError as json_err:
+                        print(f"Error decoding Ollama response line: {line}, Error: {json_err}")
+                    except Exception as e:
+                        print(f"Error processing Ollama stream chunk: {e}")
+                        yield json.dumps({"type": "error", "data": f"Error processing stream: {e}"}) + "\n\n"
+                        break # Stop streaming on processing error
+        except requests.exceptions.Timeout:
+             print(f"Error calling Ollama API: Timeout")
+             yield json.dumps({"type": "error", "data": "LLM service timed out."}) + "\n\n"
+        except requests.exceptions.RequestException as req_err:
+            print(f"Error calling Ollama API: {req_err}")
+            yield json.dumps({"type": "error", "data": f"Could not connect to LLM service: {req_err}"}) + "\n\n"
+        except Exception as e:
+            print(f"An unexpected error occurred during Ollama streaming: {e}")
+            yield json.dumps({"type": "error", "data": f"An unexpected error occurred: {e}"}) + "\n\n"
+        finally:
+            # This block executes regardless of exceptions in the try block
+            print("Closing event generator.")
+            # Send a final event to signal the end cleanly
+            yield json.dumps({"type": "close", "data": "Stream ended"}) + "\n\n"
+
+    # Return the streaming response object
+    return EventSourceResponse(event_generator(), media_type="text/event-stream")
 
 if __name__ == "__main__":
     import uvicorn

@@ -75,7 +75,7 @@ const AGNISService = {
     }).toString();
     
     // Use fetch for streaming instead of axios
-    return fetch(`${API_URL}/query-stream?${params}`, {
+    return fetch(`${API_URL}/api/query-stream?${params}`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('token') || ''}`
       }
