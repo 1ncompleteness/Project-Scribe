@@ -1802,7 +1802,7 @@ async def query_stream(
                         if chunk.get("done") is not True:
                             message_chunk = chunk.get("message", {}).get("content", "")
                             if message_chunk:
-                                yield json.dumps({"type": "message", "data": message_chunk}) + "\n\n"
+                                yield json.dumps({"type": "answer", "content": message_chunk}) + "\n\n"
                         else:
                             final_info = chunk.get("total_duration")
                             if final_info:

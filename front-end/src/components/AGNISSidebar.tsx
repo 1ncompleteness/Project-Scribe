@@ -59,36 +59,53 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected }) =>
     
     setIsAsking(true);
     setAnswer("");
+    console.log("Asking question:", question, "System prompt:", systemPrompt);
     
     try {
       const stream = await AGNISService.askQuestion(question, systemPrompt);
+      console.log("Stream received from service");
       const reader = stream.getReader();
+      const decoder = new TextDecoder();
       
       while (true) {
         const { done, value } = await reader.read();
+        console.log("Reader read:", { done, value });
         
-        if (done) break;
+        if (done) {
+          console.log("Stream finished");
+          break;
+        }
         
-        // Parse the SSE data
-        const text = new TextDecoder().decode(value);
-        const lines = text.split("\n").filter(line => line.trim() !== "");
+        const textChunk = decoder.decode(value, { stream: true });
+        console.log("Decoded chunk:", textChunk);
+        
+        const lines = textChunk.split("\n").filter(line => line.trim() !== "");
+        console.log("Parsed lines:", lines);
         
         for (const line of lines) {
+          console.log("Processing line:", line);
           if (line.startsWith("data: ")) {
             try {
-              const data = JSON.parse(line.substring(6));
+              const jsonData = line.substring(6);
+              console.log("Attempting to parse JSON:", jsonData);
+              const data = JSON.parse(jsonData);
+              console.log("Parsed data:", data);
               
-              if (data.type === "answer") {
+              if (data.type === "answer" && data.content) {
+                console.log("Updating answer with content:", data.content);
                 setAnswer(prev => prev + data.content);
+              } else {
+                console.log("Received data object, but not type 'answer' or no content:", data);
               }
               
-              // Scroll to the bottom of the answer container
               if (answerRef.current) {
                 answerRef.current.scrollTop = answerRef.current.scrollHeight;
               }
             } catch (e) {
-              console.error("Error parsing SSE data:", e);
+              console.error("Error parsing SSE JSON:", e, "Raw line:", line);
             }
+          } else {
+             console.log("Line does not start with 'data: '");
           }
         }
       }
@@ -96,6 +113,7 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected }) =>
       console.error("Question answering error:", error);
       setAnswer("Sorry, there was an error processing your question. Please try again.");
     } finally {
+      console.log("Finished asking question flow.");
       setIsAsking(false);
     }
   };
