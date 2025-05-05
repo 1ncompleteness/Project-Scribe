@@ -112,6 +112,11 @@ const AGNISService = {
       note_type: noteType,
       details: details
     });
+  },
+  
+  // Reset database
+  resetDatabase: (): Promise<AxiosResponse<{message: string}>> => {
+    return apiClient.post('/api/admin/reset-database');
   }
 };
 

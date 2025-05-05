@@ -1,3 +1,108 @@
 @tailwind base;
 @tailwind components;
-@tailwind utilities; 
+@tailwind utilities;
+
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/* Font Size Classes */
+.font-small {
+  font-size: 0.875rem;
+}
+
+.font-medium {
+  font-size: 1rem;
+}
+
+.font-large {
+  font-size: 1.125rem;
+}
+
+/* Dark Mode */
+body.dark-mode {
+  background-color: #121212;
+  color: #e0e0e0;
+}
+
+body.dark-mode .bg-white {
+  background-color: #1e1e1e;
+}
+
+body.dark-mode .text-gray-800 {
+  color: #e0e0e0;
+}
+
+body.dark-mode .text-gray-700 {
+  color: #d0d0d0;
+}
+
+body.dark-mode .text-gray-600 {
+  color: #b0b0b0;
+}
+
+body.dark-mode .text-gray-500 {
+  color: #909090;
+}
+
+body.dark-mode .border-gray-200 {
+  border-color: #333333;
+}
+
+body.dark-mode .bg-gray-100 {
+  background-color: #2a2a2a;
+}
+
+body.dark-mode .text-blue-800 {
+  color: #90caf9;
+}
+
+body.dark-mode .bg-blue-100 {
+  background-color: #1a365d;
+}
+
+body.dark-mode .bg-gray-50 {
+  background-color: #252525;
+}
+
+body.dark-mode .shadow-md {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* High Contrast Mode */
+body.high-contrast {
+  --contrast-bg: #000000;
+  --contrast-text: #ffffff;
+  --contrast-link: #ffff00;
+  --contrast-border: #ffffff;
+  --contrast-button: #ffff00;
+  --contrast-button-text: #000000;
+}
+
+body.high-contrast .bg-white {
+  background-color: var(--contrast-bg);
+}
+
+body.high-contrast .text-gray-800,
+body.high-contrast .text-gray-700,
+body.high-contrast .text-gray-600,
+body.high-contrast .text-gray-500 {
+  color: var(--contrast-text);
+}
+
+body.high-contrast .border-gray-200 {
+  border-color: var(--contrast-border);
+}
+
+body.high-contrast button:not([disabled]) {
+  background-color: var(--contrast-button);
+  color: var(--contrast-button-text);
+  border: 2px solid var(--contrast-border);
+}
+
+/* Reduced Motion */
+body.reduced-motion * {
+  transition: none !important;
+  animation: none !important;
+} 

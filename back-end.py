@@ -2149,6 +2149,69 @@ async def generate_note_template(request: NoteTemplateRequest, current_user: Use
             detail=f"Failed to generate template: {str(e)}"
         )
 
+# Add after other endpoints
+@app.post("/api/admin/reset-database")
+async def reset_database(current_user: User = Depends(get_current_active_user)):
+    """
+    Reset the database by removing all user data except for the admin account.
+    """
+    print(f"Database reset requested by user: {current_user.username}")
+    
+    # Only allow admin to reset the database
+    if current_user.username != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin users can reset the database"
+        )
+    
+    try:
+        # Delete all notes (keeping relationships for cleanup)
+        neo4j_graph.query(
+            """
+            MATCH (n:Note)
+            DETACH DELETE n
+            """
+        )
+        
+        # Delete all journals (keeping relationships for cleanup)
+        neo4j_graph.query(
+            """
+            MATCH (j:Journal)
+            DETACH DELETE j
+            """
+        )
+        
+        # Delete all relationships that might be dangling after previous operations
+        neo4j_graph.query(
+            """
+            MATCH ()-[r:CREATED_BY|BELONGS_TO|OWNED_BY]->()
+            DELETE r
+            """
+        )
+        
+        # Delete all user accounts except admin
+        neo4j_graph.query(
+            """
+            MATCH (u:User)
+            WHERE u.username <> 'admin'
+            DETACH DELETE u
+            """
+        )
+        
+        # Re-initialize the database with sample data
+        initialize_database()
+        
+        print("Database reset successfully")
+        return {"message": "Database has been reset successfully"}
+    except Exception as e:
+        print(f"Error during database reset: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset database: {str(e)}"
+        )
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8585)

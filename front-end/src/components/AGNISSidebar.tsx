@@ -1,13 +1,27 @@
 import React, { useState, useRef, useEffect } from "react";
 import AGNISService, { SearchResult, SummaryResponse, TemplateResponse } from "../services/AGNISService";
 
+// Add settings interfaces
+interface SettingsState {
+  darkMode: boolean;
+  fontSize: 'small' | 'medium' | 'large';
+  highContrast: boolean;
+  reducedMotion: boolean;
+}
+
 export interface AGNISSidebarProps {
   notes: any[];
   onNoteSelected: (noteId: string) => void;
   onCreateNote?: (title: string, content: string) => void;
+  onSettingsChange?: (settings: SettingsState) => void;
 }
 
-const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCreateNote }) => {
+const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ 
+  notes, 
+  onNoteSelected, 
+  onCreateNote,
+  onSettingsChange
+}) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchType, setSearchType] = useState<"text" | "semantic" | "tags">("text");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -26,7 +40,7 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
   const [selectedNoteForSummary, setSelectedNoteForSummary] = useState<string | null>(null);
   const [summaries, setSummaries] = useState<Record<string, SummaryResponse>>({});
   const [isSummarizing, setIsSummarizing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'search' | 'ask' | 'summarize' | 'template'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'ask' | 'summarize' | 'template' | 'settings'>('search');
   
   // Template suggestion state
   const [noteType, setNoteType] = useState("");
@@ -36,6 +50,30 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
   const [templateError, setTemplateError] = useState<string | null>(null);
   const [errorTimer, setErrorTimer] = useState<NodeJS.Timeout | null>(null);
   
+  // Settings state
+  const [settings, setSettings] = useState<SettingsState>(() => {
+    // Initialize from localStorage if available
+    const savedSettings = localStorage.getItem('projectScribeSettings');
+    if (savedSettings) {
+      try {
+        return JSON.parse(savedSettings);
+      } catch (e) {
+        console.error('Error parsing saved settings:', e);
+      }
+    }
+    
+    // Default settings
+    return {
+      darkMode: false,
+      fontSize: 'medium',
+      highContrast: false,
+      reducedMotion: false
+    };
+  });
+  const [showResetConfirmation, setShowResetConfirmation] = useState(false);
+  const [isResettingDatabase, setIsResettingDatabase] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  
   // Use a constant array instead of state since we don't need to update it
   const commonNoteTypes = [
     'Meeting Notes', 'Project Plan', 'Research Notes', 'Journal Entry',
@@ -44,6 +82,66 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
   ];
   
   const answerRef = useRef<HTMLDivElement>(null);
+  
+  // Persist settings to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('projectScribeSettings', JSON.stringify(settings));
+    
+    // Notify parent component about settings change if callback is provided
+    if (onSettingsChange) {
+      onSettingsChange(settings);
+    }
+    
+    // Apply dark mode to body
+    if (settings.darkMode) {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+    }
+    
+    // Apply font size to body
+    document.body.classList.remove('font-small', 'font-medium', 'font-large');
+    document.body.classList.add(`font-${settings.fontSize}`);
+    
+    // Apply high contrast if enabled
+    if (settings.highContrast) {
+      document.body.classList.add('high-contrast');
+    } else {
+      document.body.classList.remove('high-contrast');
+    }
+    
+    // Apply reduced motion if enabled
+    if (settings.reducedMotion) {
+      document.body.classList.add('reduced-motion');
+    } else {
+      document.body.classList.remove('reduced-motion');
+    }
+  }, [settings, onSettingsChange]);
+
+  // Function to update settings
+  const updateSettings = (updates: Partial<SettingsState>) => {
+    setSettings(prev => ({...prev, ...updates}));
+  };
+  
+  // Function to reset database
+  const resetDatabase = async () => {
+    setIsResettingDatabase(true);
+    setResetError(null);
+    
+    try {
+      // Call API to reset database
+      await AGNISService.resetDatabase();
+      setShowResetConfirmation(false);
+      // Show success message or trigger refresh
+      alert('Database has been reset successfully. The page will reload.');
+      window.location.reload();
+    } catch (error) {
+      console.error('Error resetting database:', error);
+      setResetError('Failed to reset database. Please try again.');
+    } finally {
+      setIsResettingDatabase(false);
+    }
+  };
   
   // Search function
   const handleSearch = async () => {
@@ -308,6 +406,16 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
           onClick={() => setActiveTab('summarize')}
         >
           Summary
+        </button>
+        <button
+          className={`flex-1 py-2 px-2 text-xs sm:text-sm font-medium ${
+            activeTab === 'settings' 
+              ? 'text-blue-600 border-b-2 border-blue-500' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+          onClick={() => setActiveTab('settings')}
+        >
+          Settings
         </button>
       </div>
       
@@ -605,6 +713,177 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
             )) : (
               <p className="text-sm text-gray-500">No notes available to summarize.</p>
             )}
+          </div>
+        </div>
+      )}
+      
+      {/* Settings Panel */}
+      {activeTab === 'settings' && (
+        <div className="p-4 flex-1 overflow-auto">
+          <h3 className="text-md font-medium text-gray-700 mb-4">Settings</h3>
+          
+          {/* Appearance Section */}
+          <div className="mb-6">
+            <h4 className="text-sm font-semibold text-gray-600 mb-3 pb-1 border-b">Appearance</h4>
+            
+            {/* Dark Mode Toggle */}
+            <div className="flex items-center justify-between mb-4">
+              <label className="text-sm font-medium text-gray-700">Dark Mode</label>
+              <button
+                onClick={() => updateSettings({ darkMode: !settings.darkMode })}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full ${
+                  settings.darkMode ? 'bg-blue-600' : 'bg-gray-200'
+                }`}
+              >
+                <span className="sr-only">Toggle Dark Mode</span>
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                    settings.darkMode ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+            
+            {/* Font Size Selection */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Font Size</label>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => updateSettings({ fontSize: 'small' })}
+                  className={`px-3 py-1 text-sm rounded-md ${
+                    settings.fontSize === 'small'
+                      ? 'bg-blue-100 text-blue-800 border-blue-300 border'
+                      : 'bg-gray-100 text-gray-800 border border-gray-300'
+                  }`}
+                >
+                  Small
+                </button>
+                <button
+                  onClick={() => updateSettings({ fontSize: 'medium' })}
+                  className={`px-3 py-1 text-sm rounded-md ${
+                    settings.fontSize === 'medium'
+                      ? 'bg-blue-100 text-blue-800 border-blue-300 border'
+                      : 'bg-gray-100 text-gray-800 border border-gray-300'
+                  }`}
+                >
+                  Medium
+                </button>
+                <button
+                  onClick={() => updateSettings({ fontSize: 'large' })}
+                  className={`px-3 py-1 text-sm rounded-md ${
+                    settings.fontSize === 'large'
+                      ? 'bg-blue-100 text-blue-800 border-blue-300 border'
+                      : 'bg-gray-100 text-gray-800 border border-gray-300'
+                  }`}
+                >
+                  Large
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {/* Accessibility Section */}
+          <div className="mb-6">
+            <h4 className="text-sm font-semibold text-gray-600 mb-3 pb-1 border-b">Accessibility</h4>
+            
+            {/* High Contrast Mode */}
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700">High Contrast</label>
+                <p className="text-xs text-gray-500">Increases contrast for better readability</p>
+              </div>
+              <button
+                onClick={() => updateSettings({ highContrast: !settings.highContrast })}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full ${
+                  settings.highContrast ? 'bg-blue-600' : 'bg-gray-200'
+                }`}
+              >
+                <span className="sr-only">Toggle High Contrast</span>
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                    settings.highContrast ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+            
+            {/* Reduced Motion */}
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700">Reduced Motion</label>
+                <p className="text-xs text-gray-500">Minimizes animations and transitions</p>
+              </div>
+              <button
+                onClick={() => updateSettings({ reducedMotion: !settings.reducedMotion })}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full ${
+                  settings.reducedMotion ? 'bg-blue-600' : 'bg-gray-200'
+                }`}
+              >
+                <span className="sr-only">Toggle Reduced Motion</span>
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                    settings.reducedMotion ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+          
+          {/* Data Management Section */}
+          <div className="mb-6">
+            <h4 className="text-sm font-semibold text-gray-600 mb-3 pb-1 border-b">Data Management</h4>
+            
+            {/* Reset Database */}
+            <div className="mb-4">
+              <div className="flex flex-col mb-2">
+                <label className="text-sm font-medium text-gray-700">Reset Database</label>
+                <p className="text-xs text-gray-500">
+                  This will erase all notes, journals, and other data. This action cannot be undone.
+                </p>
+              </div>
+              
+              {!showResetConfirmation ? (
+                <button
+                  onClick={() => setShowResetConfirmation(true)}
+                  className="mt-2 px-3 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-md"
+                >
+                  Reset Database
+                </button>
+              ) : (
+                <div className="mt-2 p-3 border border-red-300 bg-red-50 rounded-md">
+                  <p className="text-sm text-red-700 font-medium mb-3">
+                    Are you sure? This will delete ALL data and cannot be undone.
+                  </p>
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={() => setShowResetConfirmation(false)}
+                      className="px-3 py-1 text-sm bg-gray-200 hover:bg-gray-300 rounded-md"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={resetDatabase}
+                      disabled={isResettingDatabase}
+                      className="px-3 py-1 text-sm text-white bg-red-600 hover:bg-red-700 rounded-md disabled:bg-red-300"
+                    >
+                      {isResettingDatabase ? 'Resetting...' : 'Confirm Reset'}
+                    </button>
+                  </div>
+                  {resetError && (
+                    <p className="mt-2 text-sm text-red-600">{resetError}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Application Information */}
+          <div>
+            <h4 className="text-sm font-semibold text-gray-600 mb-3 pb-1 border-b">About</h4>
+            <p className="text-sm text-gray-600 mb-1">Project Scribe v1.0.0</p>
+            <p className="text-xs text-gray-500">
+              A powerful note-taking and knowledge management application with AI capabilities.
+            </p>
           </div>
         </div>
       )}
