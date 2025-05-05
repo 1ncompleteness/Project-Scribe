@@ -173,11 +173,21 @@ const getJournalNotes = (id: string) => {
 };
 
 const createJournal = (journalData: JournalCreateRequest) => {
-  return apiClient.post<Journal>('/api/journals', journalData);
+  return apiClient.post<Journal>('/api/journals', journalData).then(response => {
+    // Trigger embedding generation in the background
+    apiClient.post(`/api/journals/embeddings/${response.data.id}`)
+      .catch(err => console.error('Failed to generate embeddings for journal:', err));
+    return response;
+  });
 };
 
 const updateJournal = (id: string, journalData: JournalUpdateRequest) => {
-  return apiClient.put<Journal>(`/api/journals/${id}`, journalData);
+  return apiClient.put<Journal>(`/api/journals/${id}`, journalData).then(response => {
+    // Generate embeddings for journal after update
+    apiClient.post(`/api/journals/embeddings/${id}`)
+      .catch(err => console.error('Failed to generate embeddings for journal:', err));
+    return response;
+  });
 };
 
 const deleteJournal = (id: string, deleteNotes: boolean = false) => {

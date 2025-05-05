@@ -46,6 +46,13 @@ def create_vector_index(driver) -> None:
         driver.query(index_query)
     except:  # Already exists
         pass
+        
+    # Index for journals
+    index_query = "CREATE VECTOR INDEX journals_vector IF NOT EXISTS FOR (j:Journal) ON j.embedding"
+    try:
+        driver.query(index_query)
+    except:  # Already exists
+        pass
 
 # Add a simple logger class to avoid utils dependency
 class BaseLogger:
@@ -188,9 +195,17 @@ def initialize_database():
     journal_id = str(uuid.uuid4())
     current_time = datetime.utcnow().isoformat()
     
+    # Create a sample template
+    template = {
+        "sections": [
+            {"name": "Summary", "type": "text", "required": True},
+            {"name": "Details", "type": "text", "required": False},
+            {"name": "Action Items", "type": "checklist", "required": False}
+        ]
+    }
+    
     # Convert template to JSON string
-    template_data = {"field1": "text", "field2": "date"}
-    template_json = json.dumps(template_data)
+    template_json = json.dumps(template)
     
     neo4j_graph.query(
         """
@@ -216,6 +231,21 @@ def initialize_database():
     )
     
     print("Created sample journal")
+    
+    # Generate embedding for the sample journal
+    journal_text = "Sample Journal This is a sample journal created during initialization"
+    journal_embedding = embedding_model.embed_query(journal_text)
+    
+    # Store the embedding
+    neo4j_graph.query(
+        """
+        MATCH (j:Journal {id: $journal_id})
+        SET j.embedding = $embedding
+        """,
+        {"journal_id": journal_id, "embedding": journal_embedding}
+    )
+    
+    print("Generated embedding for sample journal")
 
     # Create a sample note
     note_id = str(uuid.uuid4())
@@ -273,6 +303,22 @@ def initialize_database():
     )
     
     print("Created sample note and linked it to the journal")
+    
+    # Generate embedding for the sample note
+    note_text = "Welcome to Project Scribe This is a sample note to help you get started."
+    note_embedding = embedding_model.embed_query(note_text)
+    
+    # Store the embedding
+    neo4j_graph.query(
+        """
+        MATCH (n:Note {id: $note_id})
+        SET n.embedding = $embedding
+        """,
+        {"note_id": note_id, "embedding": note_embedding}
+    )
+    
+    print("Generated embedding for sample note")
+    
     print("Database initialization complete")
 
 # Lifespan context manager (replacing on_event)
@@ -1174,6 +1220,7 @@ class SearchResult(BaseModel):
     excerpt: str
     score: float
     tags: List[str] = []
+    type: str = "note"  # Add type field with default value "note"
 
 class SearchResponse(BaseModel):
     results: List[SearchResult]
@@ -1241,7 +1288,8 @@ async def search_notes(query: str, current_user: User = Depends(get_current_acti
             "title": result["title"],
             "excerpt": excerpt,
             "score": result["score"],
-            "tags": result["tags"] if result["tags"] else []
+            "tags": result["tags"] if result["tags"] else [],
+            "type": result["type"]
         })
     
     return {"results": search_results, "total": len(search_results)}
@@ -1261,86 +1309,128 @@ async def semantic_search(query: str, current_user: User = Depends(get_current_a
         MATCH (n:Note)-[:CREATED_BY]->(u:User {username: $username})
         RETURN n.id as id, n.title as title, n.content as content, 
                n.tags as tags, n.updated_at as updated_at,
-               n.embedding as embedding
+               n.embedding as embedding,
+               'note' as type
         """,
         {"username": current_user.username}
     )
     
+    # Get all journals with their embeddings
+    journals = neo4j_graph.query(
+        """
+        MATCH (j:Journal)-[:OWNED_BY]->(u:User {username: $username})
+        RETURN j.id as id, j.title as title, j.description as description, 
+               j.updated_at as updated_at, j.embedding as embedding,
+               'journal' as type
+        """,
+        {"username": current_user.username}
+    )
+    
+    # Combine results for processing
+    all_items = notes + journals
+    
     # Calculate similarity in Python
     search_results = []
-    for note in notes:
-        # Extract text content for excerpt
-        content_dict = deserialize_json_field(note["content"])
-        text_content = content_dict.get("text", "")
+    for item in all_items:
+        item_type = item.get("type", "note")
         
-        # If note has no embedding yet, generate one on the fly
-        if not note.get("embedding"):
-            note_text = f"{note['title']} {text_content}"
-            note_embedding = embedding_model.embed_query(note_text)
+        if item_type == "note":
+            # Extract text content for excerpt
+            content_dict = deserialize_json_field(item["content"])
+            text_content = content_dict.get("text", "")
             
-            # Optionally store this for future use
-            neo4j_graph.query(
-                """
-                MATCH (n:Note {id: $note_id})
-                SET n.embedding = $embedding
-                """,
-                {"note_id": note["id"], "embedding": note_embedding}
-            )
-        else:
-            note_embedding = note["embedding"]
-        
+            # If note has no embedding yet, generate one on the fly
+            if not item.get("embedding"):
+                note_text = f"{item['title']} {text_content}"
+                item_embedding = embedding_model.embed_query(note_text)
+                
+                # Store this for future use
+                neo4j_graph.query(
+                    """
+                    MATCH (n:Note {id: $item_id})
+                    SET n.embedding = $embedding
+                    """,
+                    {"item_id": item["id"], "embedding": item_embedding}
+                )
+            else:
+                item_embedding = item["embedding"]
+            
+            excerpt = text_content[:100] + "..." if len(text_content) > 100 else text_content
+            tags = item["tags"] if item["tags"] else []
+            
+        else:  # journal
+            # If journal has no embedding yet, generate one on the fly
+            description = item.get("description", "")
+            
+            if not item.get("embedding"):
+                journal_text = f"{item['title']} {description}"
+                item_embedding = embedding_model.embed_query(journal_text)
+                
+                # Store this for future use
+                neo4j_graph.query(
+                    """
+                    MATCH (j:Journal {id: $item_id})
+                    SET j.embedding = $embedding
+                    """,
+                    {"item_id": item["id"], "embedding": item_embedding}
+                )
+            else:
+                item_embedding = item["embedding"]
+            
+            excerpt = description[:100] + "..." if len(description) > 100 else description
+            tags = []  # Journals don't have tags
+            
         # Calculate cosine similarity
         if isinstance(query_embedding, list):
             query_vec = np.array(query_embedding)
         else:
             query_vec = query_embedding
             
-        if isinstance(note_embedding, list):
-            note_vec = np.array(note_embedding)
+        if isinstance(item_embedding, list):
+            item_vec = np.array(item_embedding)
         else:
-            note_vec = note_embedding
+            item_vec = item_embedding
         
-        # Simple dot product for similarity
-        similarity = np.dot(query_vec, note_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(note_vec))
+        # Calculate dot product for similarity
+        similarity = np.dot(query_vec, item_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(item_vec))
         
-        # Only include results with reasonable similarity - lowering threshold to 0.2 to catch more potential matches
-        if similarity > 0.2:  # Changed from 0.5 to 0.2
-            excerpt = text_content[:100] + "..." if len(text_content) > 100 else text_content
-            
+        # Only include results with reasonable similarity - threshold at 0.2
+        if similarity > 0.2:
             search_results.append({
-                "id": note["id"],
-                "title": note["title"],
+                "id": item["id"],
+                "title": item["title"],
                 "excerpt": excerpt,
                 "score": float(similarity),  # Convert to float for JSON serialization
-                "tags": note["tags"] if note["tags"] else []
+                "tags": tags,
+                "type": item_type  # Include type in results
             })
     
     # Sort by similarity score
     search_results.sort(key=lambda x: x["score"], reverse=True)
     
-    # Return top results
-    return {"results": search_results[:20], "total": len(search_results)}
+    # Limit to top 20 results
+    return {"results": search_results[:20], "total": len(search_results[:20])}
 
 # Tag-based search endpoint
 @app.get("/api/search/tags", response_model=SearchResponse)
-async def tag_search(query: str, current_user: User = Depends(get_current_active_user)):
-    if not query or len(query.strip()) < 2:
+async def tag_search(tags: str, current_user: User = Depends(get_current_active_user)):
+    # Split tags by comma and strip whitespace
+    tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
+    
+    if not tag_list:
         return {"results": [], "total": 0}
     
-    # Create case-insensitive regex pattern for tag matching
-    pattern = re.compile(query, re.IGNORECASE)
-    
-    # Search notes by tags
+    # Search notes with any of the provided tags
     results = neo4j_graph.query(
         """
         MATCH (n:Note)-[:CREATED_BY]->(u:User {username: $username})
-        WHERE ANY(tag IN n.tags WHERE tag =~ $query_regex)
+        WHERE any(tag IN n.tags WHERE tag IN $tag_list)
         RETURN n.id as id, n.title as title, n.content as content, 
-               n.tags as tags, n.updated_at as updated_at
+               n.tags as tags, n.updated_at as updated_at,
+               'note' as type
         ORDER BY n.updated_at DESC
-        LIMIT 20
         """,
-        {"username": current_user.username, "query_regex": f"(?i).*{query}.*"}
+        {"username": current_user.username, "tag_list": tag_list}
     )
     
     search_results = []
@@ -1350,17 +1440,16 @@ async def tag_search(query: str, current_user: User = Depends(get_current_active
         text_content = content_dict.get("text", "")
         excerpt = text_content[:100] + "..." if len(text_content) > 100 else text_content
         
-        # Find matching tags
-        matching_tags = []
-        if result["tags"]:
-            matching_tags = [tag for tag in result["tags"] if pattern.search(tag)]
+        # Calculate matching tags for scoring
+        matching_tags = [tag for tag in result["tags"] if tag in tag_list]
         
         search_results.append({
             "id": result["id"],
             "title": result["title"],
             "excerpt": excerpt,
             "score": len(matching_tags),  # Score based on number of matching tags
-            "tags": result["tags"] if result["tags"] else []
+            "tags": result["tags"] if result["tags"] else [],
+            "type": result["type"]
         })
     
     # Sort by score (number of matching tags)
@@ -1375,7 +1464,7 @@ def generate_note_embeddings(note_id: str = None):
         note = neo4j_graph.query(
             """
             MATCH (n:Note {id: $note_id})
-            RETURN n.id as id, n.content as content
+            RETURN n.id as id, n.title as title, n.content as content
             """,
             {"note_id": note_id}
         )
@@ -1387,8 +1476,11 @@ def generate_note_embeddings(note_id: str = None):
         content_dict = deserialize_json_field(note["content"])
         text_content = content_dict.get("text", "")
         
-        if text_content:
-            embedding = embedding_model.embed_query(text_content)
+        # Include title in embedding to improve search relevance
+        embed_text = f"{note['title']} {text_content}"
+        
+        if embed_text.strip():
+            embedding = embedding_model.embed_query(embed_text)
             
             # Store embedding back to note
             neo4j_graph.query(
@@ -1404,7 +1496,7 @@ def generate_note_embeddings(note_id: str = None):
             """
             MATCH (n:Note)
             WHERE n.embedding IS NULL
-            RETURN n.id as id, n.content as content
+            RETURN n.id as id, n.title as title, n.content as content
             LIMIT 100  // Process in batches
             """
         )
@@ -1413,8 +1505,11 @@ def generate_note_embeddings(note_id: str = None):
             content_dict = deserialize_json_field(note["content"])
             text_content = content_dict.get("text", "")
             
-            if text_content:
-                embedding = embedding_model.embed_query(text_content)
+            # Include title in embedding to improve search relevance
+            embed_text = f"{note['title']} {text_content}"
+            
+            if embed_text.strip():
+                embedding = embedding_model.embed_query(embed_text)
                 
                 # Store embedding back to note
                 neo4j_graph.query(
@@ -1423,6 +1518,67 @@ def generate_note_embeddings(note_id: str = None):
                     SET n.embedding = $embedding
                     """,
                     {"note_id": note["id"], "embedding": embedding}
+                )
+
+# Generate embeddings for journals
+def generate_journal_embeddings(journal_id: str = None):
+    if journal_id:
+        # Generate embedding for a specific journal
+        journal = neo4j_graph.query(
+            """
+            MATCH (j:Journal {id: $journal_id})
+            RETURN j.id as id, j.title as title, j.description as description
+            """,
+            {"journal_id": journal_id}
+        )
+        
+        if not journal:
+            return
+        
+        journal = journal[0]
+        description = journal.get("description", "")
+        
+        # Combine title and description for embedding
+        embed_text = f"{journal['title']} {description}"
+        
+        if embed_text.strip():
+            embedding = embedding_model.embed_query(embed_text)
+            
+            # Store embedding back to journal
+            neo4j_graph.query(
+                """
+                MATCH (j:Journal {id: $journal_id})
+                SET j.embedding = $embedding
+                """,
+                {"journal_id": journal["id"], "embedding": embedding}
+            )
+    else:
+        # Generate embeddings for all journals without embeddings
+        journals = neo4j_graph.query(
+            """
+            MATCH (j:Journal)
+            WHERE j.embedding IS NULL
+            RETURN j.id as id, j.title as title, j.description as description
+            LIMIT 100  // Process in batches
+            """
+        )
+        
+        for journal in journals:
+            description = journal.get("description", "")
+            
+            # Combine title and description for embedding
+            embed_text = f"{journal['title']} {description}"
+            
+            if embed_text.strip():
+                embedding = embedding_model.embed_query(embed_text)
+                
+                # Store embedding back to journal
+                neo4j_graph.query(
+                    """
+                    MATCH (j:Journal {id: $journal_id})
+                    SET j.embedding = $embedding
+                    """,
+                    {"journal_id": journal["id"], "embedding": embedding}
                 )
 
 # Hook into note creation/update to generate embeddings
@@ -1448,210 +1604,28 @@ async def create_note_embedding(note_id: str, current_user: User = Depends(get_c
     
     return {"message": "Embedding generation started"}
 
-# Question answering endpoints - integrated with the main API
-# Remove dependency on external chains module
-# from chains import configure_qa_rag_chain, load_llm, load_embedding_model
-
-# Instead, define simple stubs for these functions
-def load_embedding_model(embedding_model_name: str, logger=None, config={}):
-    # We already have the embedding_model defined above
-    if embedding_model_name == "sentence-transformers":
-        dimension = 384
-    else:
-        dimension = 384  # Default
-    return embedding_model, dimension
-
-def load_llm(llm_name: str, logger=None, config={}):
-    # Simple stub that would be replaced with actual LLM implementation
-    return None
-
-def configure_qa_rag_chain(llm, embeddings, embeddings_store_url, username, password):
-    # Simple stub that would be replaced with actual implementation
-    return None
-
-@app.get("/query")
-async def ask_question(question: QuestionQuery = Depends(), current_user: User = Depends(get_current_active_user)):
-    if not question.text.strip():
+# Hook into journal creation/update to generate embeddings
+@app.post("/api/journals/embeddings/{journal_id}")
+async def create_journal_embedding(journal_id: str, current_user: User = Depends(get_current_active_user)):
+    # Verify user owns the journal
+    journal = neo4j_graph.query(
+        """
+        MATCH (j:Journal {id: $journal_id})-[:OWNED_BY]->(u:User {username: $username})
+        RETURN j
+        """,
+        {"journal_id": journal_id, "username": current_user.username}
+    )
+    
+    if not journal:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Question text cannot be empty"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Journal not found or you don't have access to it"
         )
-
-    # Hard-coded use of Llama3 for now
-    llm_name = "llama3"
     
-    try:
-        # Prepare to call Ollama API for Llama3
-        import requests
-        import os
-        
-        # Get Ollama base URL from environment variable or use default
-        ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
-        
-        # Get user's notes to provide context
-        notes = neo4j_graph.query(
-            """
-            MATCH (n:Note)-[:CREATED_BY]->(u:User {username: $username})
-            RETURN n.title as title, n.content as content
-            LIMIT 5
-            """,
-            {"username": current_user.username}
-        )
-        
-        # Create context from notes
-        context = ""
-        for note in notes:
-            content_dict = deserialize_json_field(note["content"])
-            text_content = content_dict.get("text", "")
-            context += f"Title: {note['title']}\nContent: {text_content}\n\n"
-        
-        # Set up system prompt
-        system_prompt = question.system_prompt or "You are a helpful assistant answering questions based on the user's notes."
-        
-        # Prepare prompt with context if RAG is enabled
-        if question.rag and context:
-            prompt = f"""
-{system_prompt}
-
-Here are some relevant notes to help you answer:
-{context}
-
-User's question: {question.text}
-            """
-        else:
-            prompt = f"{system_prompt}\n\nUser's question: {question.text}"
-        
-        # Call Ollama API
-        response = requests.post(
-            f"{ollama_base_url}/api/generate",
-            json={
-                "model": llm_name,
-                "prompt": prompt,
-                "stream": False
-            },
-            timeout=60
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            answer = result.get("response", "Sorry, I couldn't generate a response.")
-            
-            # Extract sources from notes used
-            sources = [note["title"] for note in notes]
-            
-            return {
-                "answer": answer,
-                "sources": sources,
-                "model": llm_name
-            }
-        else:
-            # Fallback to placeholder if Ollama API fails
-            return {
-                "answer": f"Error connecting to LLM service: HTTP {response.status_code}. Please check if Ollama is running and Llama3 model is available.",
-                "sources": [],
-                "model": llm_name
-            }
-    except Exception as e:
-        # Log error and provide clear message
-        print(f"Error in LLM query: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing question: {str(e)}"
-        )
-
-@app.get("/query-stream")
-def question_stream(question: QuestionQuery = Depends(), current_user: User = Depends(get_current_active_user)):
-    # Use SSE (Server-Sent Events) to stream responses from Llama3 via Ollama
+    # Generate embedding
+    generate_journal_embeddings(journal_id)
     
-    import requests
-    import os
-    
-    # Get Ollama base URL from environment variable or use default
-    ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
-    
-    async def generate():
-        try:
-            # First, send model info
-            yield json.dumps({"init": True, "model": "llama3"}) + "\n\n"
-            
-            # Get user's notes for context
-            notes = neo4j_graph.query(
-                """
-                MATCH (n:Note)-[:CREATED_BY]->(u:User {username: $username})
-                RETURN n.title as title, n.content as content
-                LIMIT 5
-                """,
-                {"username": current_user.username}
-            )
-            
-            # Create context from notes
-            context = ""
-            sources = []
-            for note in notes:
-                content_dict = deserialize_json_field(note["content"])
-                text_content = content_dict.get("text", "")
-                context += f"Title: {note['title']}\nContent: {text_content}\n\n"
-                sources.append(note["title"])
-            
-            # Set up system prompt
-            system_prompt = question.system_prompt or "You are a helpful assistant answering questions based on the user's notes."
-            
-            # Prepare prompt with context if RAG is enabled
-            if question.rag and context:
-                prompt = f"""
-{system_prompt}
-
-Here are some relevant notes to help you answer:
-{context}
-
-User's question: {question.text}
-                """
-            else:
-                prompt = f"{system_prompt}\n\nUser's question: {question.text}"
-            
-            # Call Ollama streaming API
-            response = requests.post(
-                f"{ollama_base_url}/api/generate",
-                json={
-                    "model": "llama3",
-                    "prompt": prompt,
-                    "stream": True
-                },
-                stream=True,
-                timeout=60
-            )
-            
-            if response.status_code == 200:
-                # Stream response tokens
-                for line in response.iter_lines():
-                    if line:
-                        try:
-                            chunk = json.loads(line)
-                            if "response" in chunk:
-                                yield json.dumps({"token": chunk["response"]}) + "\n\n"
-                        except json.JSONDecodeError:
-                            continue
-                            
-                # Send sources
-                yield json.dumps({"sources": sources}) + "\n\n"
-            else:
-                # If API call fails, send error message as a single token
-                error_msg = f"Error connecting to LLM service: HTTP {response.status_code}. Please check if Ollama is running and Llama3 model is available."
-                yield json.dumps({"token": error_msg}) + "\n\n"
-                yield json.dumps({"sources": []}) + "\n\n"
-                
-            # Signal completion
-            yield json.dumps({"done": True}) + "\n\n"
-            
-        except Exception as e:
-            # Log error 
-            print(f"Error in streaming LLM query: {str(e)}")
-            # Send error as a token
-            yield json.dumps({"token": f"Error: {str(e)}"}) + "\n\n"
-            yield json.dumps({"sources": []}) + "\n\n"
-            yield json.dumps({"done": True}) + "\n\n"
-    
-    return EventSourceResponse(generate(), media_type="text/event-stream")
+    return {"message": "Embedding generation started"}
 
 @app.post("/api/migrate/generate-all-embeddings")
 async def migrate_generate_all_embeddings(current_user: User = Depends(get_current_active_user)):
@@ -1671,18 +1645,31 @@ async def migrate_generate_all_embeddings(current_user: User = Depends(get_curre
             """
             MATCH (n:Note)
             WHERE n.embedding IS NULL
-            RETURN count(n) as missing_embeddings
+            RETURN count(n) as missing_note_embeddings
             """
         )
         
-        missing_count = result[0]["missing_embeddings"] if result else 0
+        missing_notes_count = result[0]["missing_note_embeddings"] if result else 0
+        
+        # Count journals without embeddings
+        result = neo4j_graph.query(
+            """
+            MATCH (j:Journal)
+            WHERE j.embedding IS NULL
+            RETURN count(j) as missing_journal_embeddings
+            """
+        )
+        
+        missing_journals_count = result[0]["missing_journal_embeddings"] if result else 0
         
         # Start the embedding generation process
         generate_note_embeddings()  # This will process notes in batches
+        generate_journal_embeddings()  # This will process journals in batches
         
         return {
-            "message": f"Started embedding generation for notes without embeddings",
-            "notes_to_process": missing_count
+            "message": f"Started embedding generation for items without embeddings",
+            "notes_to_process": missing_notes_count,
+            "journals_to_process": missing_journals_count
         }
     except Exception as e:
         raise HTTPException(
