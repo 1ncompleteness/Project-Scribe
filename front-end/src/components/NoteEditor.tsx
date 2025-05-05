@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Note, NoteContent } from '../services/NoteService';
 import NoteService from '../services/NoteService';
+import AGNISService from '../services/AGNISService';
 
 interface NoteEditorProps {
   note?: Note;
@@ -19,6 +20,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [isGeneratingTags, setIsGeneratingTags] = useState(false);
   const [autoGenerateTags, setAutoGenerateTags] = useState(false);
+  const [summary, setSummary] = useState<string>('');
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
 
   // Initialize editor with note data if editing
   useEffect(() => {
@@ -149,6 +152,30 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
     }
   };
 
+  // Handle summary generation
+  const handleGenerateSummary = async () => {
+    if (!note?.id || !content.trim()) {
+      // Don't generate summary if there's no note ID or content
+      alert('Please save the note before generating a summary.');
+      return;
+    }
+    
+    setIsGeneratingSummary(true);
+    
+    try {
+      const response = await AGNISService.summarizeNote(note.id);
+      
+      if (response.data && response.data.summary) {
+        setSummary(response.data.summary);
+      }
+    } catch (error) {
+      console.error('Error generating summary:', error);
+      alert('Failed to generate summary. Please try again later.');
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
+
   const handleSubmit = async () => {
     // If auto-generate tags is enabled and we don't have any tags yet, generate them
     if (autoGenerateTags && !tags.trim()) {
@@ -266,6 +293,45 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
           When enabled, tags will be automatically generated if you leave the tags field empty.
         </p>
       </div>
+      
+      {/* Summary section */}
+      {note && ( 
+        <div className="mb-4 mt-2">
+          <div className="flex justify-between items-center mb-1">
+            <label className="block text-sm font-medium text-gray-700">
+              AGNIS Summary
+            </label>
+            <button
+              type="button"
+              onClick={handleGenerateSummary}
+              disabled={isGeneratingSummary || !content.trim()}
+              className={`px-2 py-1 text-xs rounded ${isGeneratingSummary || !content.trim() 
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+            >
+              {isGeneratingSummary ? 'Generating...' : 'Generate Summary'}
+            </button>
+          </div>
+          
+          {summary && (
+            <div className="p-3 bg-gray-50 rounded-md border border-gray-200 text-sm">
+              {summary}
+            </div>
+          )}
+          
+          {!summary && !isGeneratingSummary && (
+            <div className="p-3 bg-gray-50 rounded-md border border-dashed border-gray-300 text-sm text-gray-500 italic">
+              Click "Generate Summary" to create an AI-powered summary of your note.
+            </div>
+          )}
+          
+          {isGeneratingSummary && (
+            <div className="p-3 bg-gray-50 rounded-md border border-gray-200 text-sm text-gray-500 italic">
+              Generating summary...
+            </div>
+          )}
+        </div>
+      )}
       
       {/* Image upload section */}
       <div className="mb-4">

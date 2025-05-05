@@ -49,6 +49,12 @@ export interface QuestionResponse {
   model: string;
 }
 
+export interface SummaryResponse {
+  summary: string;
+  note_id: string;
+  title: string;
+}
+
 // Service methods
 const AGNISService = {
   // Full-text search
@@ -84,6 +90,14 @@ const AGNISService = {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       return response.body as ReadableStream<Uint8Array>;
+    });
+  },
+  
+  // Note summarization
+  summarizeNote: (noteId: string, maxLength: number = 150): Promise<AxiosResponse<SummaryResponse>> => {
+    return apiClient.post('/api/notes/summarize', {
+      note_id: noteId,
+      max_length: maxLength
     });
   }
 };

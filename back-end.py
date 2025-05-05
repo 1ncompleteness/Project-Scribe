@@ -1929,6 +1929,125 @@ async def generate_tags(request: TagGenerationRequest, current_user: User = Depe
         print(f"Unexpected error generating tags: {str(e)}")
         return {"tags": ["note"]}  # Basic fallback tag
 
+# Add the new model for summarization request after the TagGenerationResponse class
+class SummarizeNoteRequest(BaseModel):
+    note_id: str
+    max_length: Optional[int] = 150  # Default max length of summary
+
+class SummarizeNoteResponse(BaseModel):
+    summary: str
+    note_id: str
+    title: str
+
+# Add the note summarization endpoint after the generate_tags endpoint
+@app.post("/api/notes/summarize", response_model=SummarizeNoteResponse)
+async def summarize_note(request: SummarizeNoteRequest, current_user: User = Depends(get_current_active_user)):
+    """
+    Generate a concise summary of a note using LLM.
+    """
+    print(f"Generating summary for note ID: {request.note_id}")
+    
+    # Verify the note exists and user has access to it
+    result = neo4j_graph.query(
+        """
+        MATCH (n:Note {id: $note_id})-[:CREATED_BY]->(u:User {username: $username})
+        RETURN n.id as id, n.title as title, n.content as content
+        """,
+        {"note_id": request.note_id, "username": current_user.username}
+    )
+    
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Note not found or you don't have access to it"
+        )
+    
+    note = result[0]
+    
+    # Extract text content from note
+    content_dict = deserialize_json_field(note["content"])
+    text_content = content_dict.get("text", "")
+    
+    if not text_content.strip():
+        return {
+            "summary": "This note contains no text content to summarize.",
+            "note_id": note["id"],
+            "title": note["title"]
+        }
+    
+    # Use Ollama API for summarization
+    ollama_url = os.getenv("OLLAMA_API_URL", "http://host.docker.internal:11434/api/chat")
+    
+    # Create prompt for summarization
+    system_prompt = f"""You are a helpful assistant that specializes in creating concise summaries.
+    
+    Instructions:
+    1. Create a clear, concise summary of the provided note text
+    2. Keep the summary under {request.max_length} characters if possible
+    3. Preserve the key points and main ideas from the original text
+    4. Maintain the same tone and language as the original
+    5. Return ONLY the summary text without any additional commentary
+    """
+    
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Note Title: {note['title']}\n\nNote Content: {text_content}"}
+    ]
+    
+    payload = {
+        "model": os.getenv("OLLAMA_MODEL", "llama3"),
+        "messages": messages,
+        "stream": False,
+        "temperature": 0.1  # Low temperature for more deterministic output
+    }
+    
+    try:
+        response = requests.post(ollama_url, json=payload, timeout=30)
+        response.raise_for_status()
+        result = response.json()
+        
+        if "message" in result and "content" in result["message"]:
+            summary = result["message"]["content"].strip()
+            
+            # Clean up the summary by removing any markdown or extra formatting
+            summary = summary.replace("```", "").strip()
+            
+            # If the model added a "Summary:" prefix, remove it
+            if summary.lower().startswith("summary:"):
+                summary = summary[8:].strip()
+                
+            print(f"Successfully generated summary for note ID: {request.note_id}")
+            
+            return {
+                "summary": summary,
+                "note_id": note["id"],
+                "title": note["title"]
+            }
+        else:
+            print("Unexpected response structure from LLM")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate summary: unexpected response format"
+            )
+    except requests.exceptions.Timeout:
+        print("Timeout error generating summary")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Timeout while generating summary"
+        )
+    except requests.exceptions.RequestException as e:
+        print(f"Network error generating summary: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Failed to connect to LLM service: {str(e)}"
+        )
+    except Exception as e:
+        print(f"Unexpected error generating summary: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate summary: {str(e)}"
+        )
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8585)

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import AGNISService, { SearchResult } from "../services/AGNISService";
+import AGNISService, { SearchResult, SummaryResponse } from "../services/AGNISService";
 
 export interface AGNISSidebarProps {
   notes: any[];
@@ -20,6 +20,12 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected }) =>
   const [systemPrompt, setSystemPrompt] = useState(
     "You are a helpful assistant that answers questions based on the provided context."
   );
+  
+  // Summarization state
+  const [selectedNoteForSummary, setSelectedNoteForSummary] = useState<string | null>(null);
+  const [summaries, setSummaries] = useState<Record<string, SummaryResponse>>({});
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'search' | 'ask' | 'summarize'>('search');
   
   const answerRef = useRef<HTMLDivElement>(null);
   
@@ -118,6 +124,29 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected }) =>
     }
   };
   
+  // Summarization function
+  const handleSummarizeNote = async (noteId: string) => {
+    if (isSummarizing) return;
+    
+    setIsSummarizing(true);
+    setSelectedNoteForSummary(noteId);
+    
+    try {
+      const response = await AGNISService.summarizeNote(noteId);
+      const summary = response.data;
+      
+      setSummaries(prev => ({
+        ...prev,
+        [noteId]: summary
+      }));
+    } catch (error) {
+      console.error("Summarization error:", error);
+      alert("Failed to generate summary. Please try again.");
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
+  
   return (
     <div className="bg-white rounded-lg shadow-md h-full overflow-hidden flex flex-col">
       <div className="p-4 border-b border-gray-200">
@@ -125,131 +154,233 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected }) =>
         <p className="text-sm text-gray-600">Artificial Generative Notation & Indexing System</p>
       </div>
       
-      <div className="p-4 border-b border-gray-200">
-        <div className="mb-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-          <div className="flex space-x-2">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search notes..."
-              className="flex-1 shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            />
-            <button
-              onClick={handleSearch}
-              disabled={isSearching}
-              className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              {isSearching ? "..." : "Search"}
-            </button>
-          </div>
-        </div>
-        
-        <div className="flex space-x-2 mb-1">
-          <label className="inline-flex items-center">
-            <input
-              type="radio"
-              className="form-radio"
-              name="searchType"
-              checked={searchType === "text"}
-              onChange={() => setSearchType("text")}
-            />
-            <span className="ml-1 text-sm text-gray-700">Text</span>
-          </label>
-          <label className="inline-flex items-center">
-            <input
-              type="radio"
-              className="form-radio"
-              name="searchType"
-              checked={searchType === "semantic"}
-              onChange={() => setSearchType("semantic")}
-            />
-            <span className="ml-1 text-sm text-gray-700">Semantic</span>
-          </label>
-          <label className="inline-flex items-center">
-            <input
-              type="radio"
-              className="form-radio"
-              name="searchType"
-              checked={searchType === "tags"}
-              onChange={() => setSearchType("tags")}
-            />
-            <span className="ml-1 text-sm text-gray-700">Tags</span>
-          </label>
-        </div>
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200">
+        <button
+          className={`flex-1 py-2 px-4 text-sm font-medium ${
+            activeTab === 'search' 
+              ? 'text-blue-600 border-b-2 border-blue-500' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+          onClick={() => setActiveTab('search')}
+        >
+          Search
+        </button>
+        <button
+          className={`flex-1 py-2 px-4 text-sm font-medium ${
+            activeTab === 'ask' 
+              ? 'text-blue-600 border-b-2 border-blue-500' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+          onClick={() => setActiveTab('ask')}
+        >
+          Ask AGNIS
+        </button>
+        <button
+          className={`flex-1 py-2 px-4 text-sm font-medium ${
+            activeTab === 'summarize' 
+              ? 'text-blue-600 border-b-2 border-blue-500' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+          onClick={() => setActiveTab('summarize')}
+        >
+          Summarize
+        </button>
       </div>
       
-      {showSearchResults && (
-        <div className="p-4 border-b border-gray-200 flex-1 overflow-auto">
-          <h3 className="text-md font-medium text-gray-700 mb-2">Search Results</h3>
-          {isSearching ? (
-            <p className="text-sm text-gray-500">Searching...</p>
-          ) : searchResults.length > 0 ? (
-            <div className="space-y-3">
-              {searchResults.map((result) => (
-                <div 
-                  key={result.id} 
-                  className="border border-gray-200 rounded p-2 cursor-pointer hover:bg-blue-50"
-                  onClick={() => onNoteSelected(result.id)}
+      {/* Search Panel */}
+      {activeTab === 'search' && (
+        <>
+          <div className="p-4 border-b border-gray-200">
+            <div className="mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search notes..."
+                  className="flex-1 shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                />
+                <button
+                  onClick={handleSearch}
+                  disabled={isSearching}
+                  className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
-                  <h4 className="font-medium text-blue-600">{result.title}</h4>
-                  <p className="text-sm text-gray-600 line-clamp-2">{result.excerpt}</p>
-                  <div className="flex flex-wrap mt-1">
-                    {result.tags && result.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="text-xs bg-gray-200 text-gray-700 px-1 py-0.5 rounded mr-1 mb-1"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                  {isSearching ? "..." : "Search"}
+                </button>
+              </div>
             </div>
-          ) : (
-            <p className="text-sm text-gray-500">No results found</p>
+            
+            <div className="flex space-x-2 mb-1">
+              <label className="inline-flex items-center">
+                <input
+                  type="radio"
+                  className="form-radio"
+                  name="searchType"
+                  checked={searchType === "text"}
+                  onChange={() => setSearchType("text")}
+                />
+                <span className="ml-1 text-sm text-gray-700">Text</span>
+              </label>
+              <label className="inline-flex items-center">
+                <input
+                  type="radio"
+                  className="form-radio"
+                  name="searchType"
+                  checked={searchType === "semantic"}
+                  onChange={() => setSearchType("semantic")}
+                />
+                <span className="ml-1 text-sm text-gray-700">Semantic</span>
+              </label>
+              <label className="inline-flex items-center">
+                <input
+                  type="radio"
+                  className="form-radio"
+                  name="searchType"
+                  checked={searchType === "tags"}
+                  onChange={() => setSearchType("tags")}
+                />
+                <span className="ml-1 text-sm text-gray-700">Tags</span>
+              </label>
+            </div>
+          </div>
+          
+          {showSearchResults && (
+            <div className="p-4 border-b border-gray-200 flex-1 overflow-auto">
+              <h3 className="text-md font-medium text-gray-700 mb-2">Search Results</h3>
+              {isSearching ? (
+                <p className="text-sm text-gray-500">Searching...</p>
+              ) : searchResults.length > 0 ? (
+                <div className="space-y-3">
+                  {searchResults.map((result) => (
+                    <div 
+                      key={result.id} 
+                      className="border border-gray-200 rounded p-2 cursor-pointer hover:bg-blue-50"
+                      onClick={() => onNoteSelected(result.id)}
+                    >
+                      <h4 className="font-medium text-blue-600">{result.title}</h4>
+                      <p className="text-sm text-gray-600 line-clamp-2">{result.excerpt}</p>
+                      <div className="flex flex-wrap mt-1">
+                        {result.tags && result.tags.map((tag) => (
+                          <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 mr-1 mb-1">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No results found.</p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+      
+      {/* Ask AGNIS Panel */}
+      {activeTab === 'ask' && (
+        <div className="p-4 flex-1 flex flex-col overflow-hidden">
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Ask a Question</label>
+            <textarea
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="What would you like to know?"
+              className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
+              rows={3}
+            />
+            
+            <div className="mt-2">
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                System Prompt <span className="text-xs text-gray-500">(Advanced)</span>
+              </label>
+              <textarea
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                placeholder="Custom instructions for the AI"
+                className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-xs border-gray-300 rounded-md"
+                rows={2}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Customize how AGNIS responds to your questions
+              </p>
+            </div>
+            
+            <button
+              onClick={handleAskQuestion}
+              disabled={isAsking || question.trim().length < 3}
+              className="mt-2 w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            >
+              {isAsking ? "Thinking..." : "Ask AGNIS"}
+            </button>
+          </div>
+          
+          {(answer || isAsking) && (
+            <div className="flex-1 overflow-auto border border-gray-200 rounded-md p-3">
+              <h3 className="text-md font-medium text-gray-700 mb-2">Answer</h3>
+              <div 
+                ref={answerRef}
+                className="prose max-w-none text-sm"
+              >
+                {isAsking && !answer && <p className="text-gray-500 italic">Thinking...</p>}
+                {answer ? <p>{answer}</p> : null}
+              </div>
+            </div>
           )}
         </div>
       )}
       
-      <div className="p-4 border-b border-gray-200">
-        <h3 className="text-md font-medium text-gray-700 mb-2">Ask a Question</h3>
-        <div className="mb-2">
-          <textarea
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Ask something about your notes..."
-            className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-            rows={2}
-            onKeyDown={(e) => e.ctrlKey && e.key === "Enter" && handleAskQuestion()}
-          />
-        </div>
-        <div className="mb-4">
-          <label className="block text-xs font-medium text-gray-700 mb-1">System Prompt</label>
-          <textarea
-            value={systemPrompt}
-            onChange={(e) => setSystemPrompt(e.target.value)}
-            className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-xs border-gray-300 rounded-md"
-            rows={2}
-          />
-        </div>
-        <button
-          onClick={handleAskQuestion}
-          disabled={isAsking || question.trim().length < 3}
-          className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-        >
-          {isAsking ? "Generating Answer..." : "Ask (llama3)"}
-        </button>
-      </div>
-      
-      {answer && (
-        <div className="p-4 flex-1 overflow-auto" ref={answerRef}>
-          <h3 className="text-md font-medium text-gray-700 mb-2">Answer</h3>
-          <div className="text-sm text-gray-800 border border-gray-200 rounded p-3 bg-gray-50 whitespace-pre-wrap">
-            {answer}
+      {/* Summarize Panel */}
+      {activeTab === 'summarize' && (
+        <div className="p-4 flex-1 overflow-auto">
+          <h3 className="text-md font-medium text-gray-700 mb-2">Generate Note Summaries</h3>
+          
+          <p className="text-sm text-gray-600 mb-4">
+            Select a note to generate a concise summary using AGNIS.
+          </p>
+          
+          <div className="space-y-3">
+            {notes.length > 0 ? notes.map((note) => (
+              <div key={note.id} className="border border-gray-200 rounded p-3">
+                <div className="flex justify-between items-start">
+                  <h4 
+                    className="font-medium text-blue-600 cursor-pointer hover:underline" 
+                    onClick={() => onNoteSelected(note.id)}
+                  >
+                    {note.title}
+                  </h4>
+                  
+                  <button
+                    onClick={() => handleSummarizeNote(note.id)}
+                    disabled={isSummarizing && selectedNoteForSummary === note.id}
+                    className={`px-2 py-1 text-xs rounded ${
+                      isSummarizing && selectedNoteForSummary === note.id
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {isSummarizing && selectedNoteForSummary === note.id
+                      ? 'Summarizing...'
+                      : summaries[note.id] ? 'Refresh' : 'Summarize'
+                    }
+                  </button>
+                </div>
+                
+                {summaries[note.id] && (
+                  <div className="mt-2">
+                    <p className="text-xs font-medium text-gray-500">SUMMARY:</p>
+                    <p className="text-sm text-gray-700 mt-1 bg-gray-50 p-2 rounded">
+                      {summaries[note.id].summary}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )) : (
+              <p className="text-sm text-gray-500">No notes available to summarize.</p>
+            )}
           </div>
         </div>
       )}
