@@ -7,18 +7,75 @@ body {
   padding: 0;
 }
 
-/* Font Size Classes */
-.font-small {
-  font-size: 0.875rem;
+/* Font Size Classes - Updated to cascade to child elements */
+body.font-small {
+  font-size: 0.8rem;
 }
 
-.font-medium {
+body.font-small input,
+body.font-small textarea,
+body.font-small button,
+body.font-small p,
+body.font-small span,
+body.font-small div,
+body.font-small li,
+body.font-small label {
+  font-size: 0.8rem;
+}
+
+body.font-small h1 { font-size: 1.2rem; }
+body.font-small h2 { font-size: 1.1rem; }
+body.font-small h3 { font-size: 1rem; }
+body.font-small h4 { font-size: 0.9rem; }
+
+body.font-medium {
   font-size: 1rem;
 }
 
-.font-large {
-  font-size: 1.125rem;
+body.font-medium input,
+body.font-medium textarea,
+body.font-medium button,
+body.font-medium p,
+body.font-medium span,
+body.font-medium div,
+body.font-medium li,
+body.font-medium label {
+  font-size: 1rem;
 }
+
+body.font-medium h1 { font-size: 1.5rem; }
+body.font-medium h2 { font-size: 1.3rem; }
+body.font-medium h3 { font-size: 1.2rem; }
+body.font-medium h4 { font-size: 1.1rem; }
+
+body.font-large {
+  font-size: 1.4rem;
+}
+
+body.font-large input,
+body.font-large textarea,
+body.font-large button,
+body.font-large p,
+body.font-large span,
+body.font-large div,
+body.font-large li,
+body.font-large label {
+  font-size: 1.4rem;
+}
+
+body.font-large h1 { font-size: 2rem; }
+body.font-large h2 { font-size: 1.8rem; }
+body.font-large h3 { font-size: 1.6rem; }
+body.font-large h4 { font-size: 1.5rem; }
+
+/* Icons and special elements should maintain proportional sizing */
+body.font-small .text-xs { font-size: 0.65rem; }
+body.font-medium .text-xs { font-size: 0.75rem; }
+body.font-large .text-xs { font-size: 1rem; }
+
+body.font-small .text-sm { font-size: 0.7rem; }
+body.font-medium .text-sm { font-size: 0.875rem; }
+body.font-large .text-sm { font-size: 1.2rem; }
 
 /* Dark Mode */
 body.dark-mode {
