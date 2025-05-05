@@ -164,9 +164,10 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
   };
   
   // Template generation function
-  const handleGenerateTemplate = async () => {
-    // Trim the note type to ensure we're checking correctly
-    const trimmedNoteType = noteType.trim();
+  const handleGenerateTemplate = async (directType?: string) => {
+    // Use the direct type if provided, otherwise use the state value
+    const typeToUse = directType || noteType;
+    const trimmedNoteType = typeToUse.trim();
     
     if (!trimmedNoteType) {
       setTemplateError('Please enter a note type');
@@ -213,25 +214,40 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
   };
   
   const handleQuickNoteType = (type: string) => {
+    // Validate input
+    if (!type || !type.trim()) {
+      return;
+    }
+    
     // Clear any existing error timers
     if (errorTimer) {
       clearTimeout(errorTimer);
       setErrorTimer(null);
     }
     
-    // Make sure the type is valid
-    if (!type || !type.trim()) {
-      return;
-    }
-    
-    // Update note type state
+    // Update UI state
     setNoteType(type);
     setTemplateError(null);
+    setIsGeneratingTemplate(true);
+    setTemplate(null);
     
-    // Delay template generation to ensure state is updated
-    setTimeout(() => {
-      handleGenerateTemplate();
-    }, 100);
+    // Direct API call to bypass any state management issues
+    AGNISService.generateTemplate(type, noteDetails)
+      .then(response => {
+        setTemplate(response.data);
+        setIsGeneratingTemplate(false);
+      })
+      .catch(error => {
+        console.error("Template generation error:", error);
+        
+        // Set a timer to show the error after a delay
+        const timer = setTimeout(() => {
+          setTemplateError("Failed to generate template. Please try again.");
+        }, 2000);
+        
+        setErrorTimer(timer);
+        setIsGeneratingTemplate(false);
+      });
   };
 
   // Update component cleanup to clear any timers
@@ -500,7 +516,7 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCr
           )}
           
           <button
-            onClick={handleGenerateTemplate}
+            onClick={() => handleGenerateTemplate()}
             disabled={isGeneratingTemplate || !noteType.trim()}
             className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
