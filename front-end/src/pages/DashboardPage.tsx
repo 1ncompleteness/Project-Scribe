@@ -11,6 +11,14 @@ interface UserData {
   full_name?: string;
 }
 
+// Define settings interface
+interface SettingsState {
+  darkMode: boolean;
+  fontSize: 'small' | 'medium' | 'large';
+  highContrast: boolean;
+  reducedMotion: boolean;
+}
+
 function DashboardPage() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +36,36 @@ function DashboardPage() {
   const [showAGNIS, setShowAGNIS] = useState(true);
   const [initialNoteTitle, setInitialNoteTitle] = useState('');
   const [initialNoteContent, setInitialNoteContent] = useState<NoteContent | null>(null);
+  const [settings, setSettings] = useState<SettingsState>(() => {
+    // Get settings from localStorage
+    const savedSettings = localStorage.getItem('projectScribeSettings');
+    if (savedSettings) {
+      try {
+        return JSON.parse(savedSettings);
+      } catch (e) {
+        console.error('Error parsing saved settings:', e);
+      }
+    }
+    
+    // Default settings
+    return {
+      darkMode: false,
+      fontSize: 'medium',
+      highContrast: false,
+      reducedMotion: false
+    };
+  });
   const navigate = useNavigate();
+
+  // Get the appropriate logo based on dark mode setting
+  const getLogoSrc = () => {
+    return settings.darkMode ? "/feather-dark.svg" : "/feather-light.svg";
+  };
+
+  // Handle settings changes from AGNISSidebar
+  const handleSettingsChange = (newSettings: SettingsState) => {
+    setSettings(newSettings);
+  };
 
   // Find journal by ID for a note
   const findJournalById = (journalId: string | undefined) => {
@@ -290,21 +327,26 @@ function DashboardPage() {
 
   // Render dashboard UI
   return (
-    <div className="min-h-screen bg-gray-100">
-      <header className="bg-white shadow-md">
-        <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-gray-800">Project Scribe</h1>
+    <div className="h-screen flex flex-col">
+      <header className="bg-white shadow dark:bg-gray-800">
+        <div className="mx-auto px-4 py-3 flex justify-between items-center">
+          <div className="flex items-center">
+            <img src={getLogoSrc()} alt="Project Scribe" className="h-8 mr-3" />
+            <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Project Scribe</h1>
+          </div>
           <div className="flex items-center space-x-4">
-            <span className="text-gray-600">
-              Welcome, {userData.full_name || userData.username}!
-            </span>
-           <button
-            onClick={handleLogout}
-            className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-          >
-            Logout
-          </button>
-        </div>
+            {userData && (
+              <span className="text-sm text-gray-700 dark:text-gray-300">
+                {userData.full_name || userData.username}
+              </span>
+            )}
+            <button
+              onClick={handleLogout}
+              className="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
@@ -574,6 +616,7 @@ function DashboardPage() {
                   notes={notes} 
                   onNoteSelected={handleNoteSelected}
                   onCreateNote={handleCreateFromTemplate}
+                  onSettingsChange={handleSettingsChange}
                 />
               </div>
             )}

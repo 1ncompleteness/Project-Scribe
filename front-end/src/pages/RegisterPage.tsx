@@ -41,7 +41,7 @@ function RegisterPage() {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <img src="/react-logo.svg" className="h-20 mx-auto mb-6" alt="React logo" />
+        <img src="/feather-light.svg" className="h-20 mx-auto mb-6" alt="Project Scribe logo" />
         <h1 className="text-2xl font-bold text-center text-gray-800 mb-6">Register for Project Scribe</h1>
         {error && <p className="text-red-500 text-center mb-4">{error}</p>}
         {success && <p className="text-green-500 text-center mb-4">{success}</p>}
