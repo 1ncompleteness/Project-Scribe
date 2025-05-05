@@ -2048,6 +2048,107 @@ async def summarize_note(request: SummarizeNoteRequest, current_user: User = Dep
             detail=f"Failed to generate summary: {str(e)}"
         )
 
+# Add after the summarization endpoint
+class NoteTemplateRequest(BaseModel):
+    note_type: str
+    details: Optional[str] = None
+
+class NoteTemplateResponse(BaseModel):
+    template: str
+    title_suggestion: str
+
+@app.post("/api/notes/template", response_model=NoteTemplateResponse)
+async def generate_note_template(request: NoteTemplateRequest, current_user: User = Depends(get_current_active_user)):
+    """
+    Generate a structured template for organizing notes based on the note type.
+    """
+    print(f"Generating template for note type: {request.note_type}")
+    
+    note_type = request.note_type.strip().lower()
+    details = request.details.strip() if request.details else ""
+    
+    # Use Ollama API for template generation
+    ollama_url = os.getenv("OLLAMA_API_URL", "http://host.docker.internal:11434/api/chat")
+    
+    # Create prompt for template generation
+    system_prompt = """You are a helpful assistant that specializes in creating structured note templates. 
+    
+    Given a note type, generate a well-organized template following these guidelines:
+    1. Include appropriate sections and subsections for the requested note type
+    2. Provide clear section headings with a consistent format
+    3. Include brief instructions or prompts in each section
+    4. Use Markdown formatting for better structure and readability
+    5. Keep the template concise yet comprehensive
+    6. The template should be immediately useful without further editing
+    
+    Return ONLY the template content in raw Markdown, without any additional commentary or explanation.
+    Also suggest an appropriate title for the note in the format "Title: [Suggested Title]" on the first line.
+    """
+    
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Note Type: {note_type}\nAdditional Details: {details}"}
+    ]
+    
+    payload = {
+        "model": os.getenv("OLLAMA_MODEL", "llama3"),
+        "messages": messages,
+        "stream": False,
+        "temperature": 0.3  # Lower temperature for more structured output
+    }
+    
+    try:
+        response = requests.post(ollama_url, json=payload, timeout=30)
+        response.raise_for_status()
+        result = response.json()
+        
+        if "message" in result and "content" in result["message"]:
+            content = result["message"]["content"].strip()
+            
+            # Extract suggested title if present
+            title_suggestion = "Untitled Note"
+            if content.lower().startswith("title:"):
+                first_line_end = content.find('\n')
+                if first_line_end != -1:
+                    title_line = content[:first_line_end].strip()
+                    # Extract the title after "Title:"
+                    title_parts = title_line.split(':', 1)
+                    if len(title_parts) > 1:
+                        title_suggestion = title_parts[1].strip()
+                    # Remove the title line from the template
+                    content = content[first_line_end:].strip()
+                    
+            print(f"Successfully generated template for note type: {note_type}")
+            
+            return {
+                "template": content,
+                "title_suggestion": title_suggestion
+            }
+        else:
+            print("Unexpected response structure from LLM")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate template: unexpected response format"
+            )
+    except requests.exceptions.Timeout:
+        print("Timeout error generating template")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Timeout while generating template"
+        )
+    except requests.exceptions.RequestException as e:
+        print(f"Network error generating template: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Failed to connect to LLM service: {str(e)}"
+        )
+    except Exception as e:
+        print(f"Unexpected error generating template: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate template: {str(e)}"
+        )
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8585)

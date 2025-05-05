@@ -26,6 +26,8 @@ function DashboardPage() {
   const [journalDescription, setJournalDescription] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showAGNIS, setShowAGNIS] = useState(true);
+  const [initialNoteTitle, setInitialNoteTitle] = useState('');
+  const [initialNoteContent, setInitialNoteContent] = useState<NoteContent | null>(null);
   const navigate = useNavigate();
 
   // Find journal by ID for a note
@@ -265,6 +267,19 @@ function DashboardPage() {
     }
   };
 
+  // Add a new function to handle template-based note creation
+  const handleCreateFromTemplate = (title: string, templateContent: string) => {
+    // Store the template content in state variables
+    setInitialNoteTitle(title);
+    setInitialNoteContent({
+      text: templateContent,
+      images: []
+    });
+    
+    // Set creating note flag
+    setIsCreatingNote(true);
+  };
+
   if (error) {
      return <div className="min-h-screen bg-gray-100 flex items-center justify-center"><p className="text-red-500">{error}</p></div>;
   }
@@ -426,11 +441,26 @@ function DashboardPage() {
                   onCancel={() => setIsEditingNote(false)}
                 />
               ) : isCreatingNote ? (
-                <NoteEditor
-                  journalId={selectedJournal?.id}
-                  onSave={createNote}
-                  onCancel={() => setIsCreatingNote(false)}
-                />
+                <div className="col-span-12 md:col-span-9 lg:col-span-9">
+                  <NoteEditor
+                    journalId={selectedJournal?.id}
+                    // Pass initial values if they exist
+                    initialTitle={initialNoteTitle}
+                    initialContent={initialNoteContent}
+                    onSave={(title, content, tags) => {
+                      createNote(title, content, tags);
+                      // Reset initial values after save
+                      setInitialNoteTitle('');
+                      setInitialNoteContent(null);
+                    }}
+                    onCancel={() => {
+                      setIsCreatingNote(false);
+                      // Reset initial values on cancel
+                      setInitialNoteTitle('');
+                      setInitialNoteContent(null);
+                    }}
+                  />
+                </div>
               ) : selectedNote ? (
                 <div className="bg-white rounded-lg shadow-md p-6">
                   <div className="flex justify-between items-start mb-4">
@@ -540,7 +570,11 @@ function DashboardPage() {
             {/* AGNIS Sidebar */}
             {showAGNIS && activeTab === 'notes' && (
               <div className="col-span-12 md:col-span-3 lg:col-span-3">
-                <AGNISSidebar notes={notes} onNoteSelected={handleNoteSelected} />
+                <AGNISSidebar 
+                  notes={notes} 
+                  onNoteSelected={handleNoteSelected}
+                  onCreateNote={handleCreateFromTemplate}
+                />
               </div>
             )}
           </div>

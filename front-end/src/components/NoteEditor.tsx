@@ -6,16 +6,25 @@ import AGNISService from '../services/AGNISService';
 interface NoteEditorProps {
   note?: Note;
   journalId?: string;
+  initialTitle?: string;
+  initialContent?: NoteContent | null;
   onSave: (title: string, content: NoteContent, tags: string[]) => void;
   onCancel: () => void;
 }
 
-const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCancel }) => {
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
+const NoteEditor: React.FC<NoteEditorProps> = ({ 
+  note, 
+  journalId, 
+  initialTitle = '',
+  initialContent = null,
+  onSave, 
+  onCancel 
+}) => {
+  const [title, setTitle] = useState(initialTitle || '');
+  const [content, setContent] = useState(initialContent?.text || '');
   const [tags, setTags] = useState('');
-  const [images, setImages] = useState<string[]>([]);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [images, setImages] = useState<string[]>(initialContent?.images || []);
+  const [audioUrl, setAudioUrl] = useState<string | null>(initialContent?.audio || null);
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [isGeneratingTags, setIsGeneratingTags] = useState(false);
@@ -31,8 +40,14 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
       setTags(note.tags.join(', '));
       setImages(note.content.images || []);
       setAudioUrl(note.content.audio || null);
+    } else if (initialContent) {
+      // For template-based notes, we've already set the initial values in the useState calls
+      console.log('Using template content:', initialContent.text);
+    } else {
+      // For regular new notes
+      setContent('');
     }
-  }, [note]);
+  }, [note, initialContent]);
 
   // Handle image upload
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

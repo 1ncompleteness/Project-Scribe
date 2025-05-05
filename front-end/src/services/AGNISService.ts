@@ -55,6 +55,11 @@ export interface SummaryResponse {
   title: string;
 }
 
+export interface TemplateResponse {
+  template: string;
+  title_suggestion: string;
+}
+
 // Service methods
 const AGNISService = {
   // Full-text search
@@ -98,6 +103,14 @@ const AGNISService = {
     return apiClient.post('/api/notes/summarize', {
       note_id: noteId,
       max_length: maxLength
+    });
+  },
+  
+  // Note template generation
+  generateTemplate: (noteType: string, details: string = ''): Promise<AxiosResponse<TemplateResponse>> => {
+    return apiClient.post('/api/notes/template', {
+      note_type: noteType,
+      details: details
     });
   }
 };

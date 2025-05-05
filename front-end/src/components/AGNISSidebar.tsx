@@ -1,12 +1,13 @@
 import React, { useState, useRef } from "react";
-import AGNISService, { SearchResult, SummaryResponse } from "../services/AGNISService";
+import AGNISService, { SearchResult, SummaryResponse, TemplateResponse } from "../services/AGNISService";
 
 export interface AGNISSidebarProps {
   notes: any[];
   onNoteSelected: (noteId: string) => void;
+  onCreateNote?: (title: string, content: string) => void;
 }
 
-const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected }) => {
+const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected, onCreateNote }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchType, setSearchType] = useState<"text" | "semantic" | "tags">("text");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -25,7 +26,18 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected }) =>
   const [selectedNoteForSummary, setSelectedNoteForSummary] = useState<string | null>(null);
   const [summaries, setSummaries] = useState<Record<string, SummaryResponse>>({});
   const [isSummarizing, setIsSummarizing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'search' | 'ask' | 'summarize'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'ask' | 'summarize' | 'template'>('search');
+  
+  // Template suggestion state
+  const [noteType, setNoteType] = useState("");
+  const [noteDetails, setNoteDetails] = useState("");
+  const [template, setTemplate] = useState<TemplateResponse | null>(null);
+  const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false);
+  const [commonNoteTypes, setCommonNoteTypes] = useState([
+    'Meeting Notes', 'Project Plan', 'Research Notes', 'Journal Entry',
+    'Book Notes', 'Lecture Notes', 'To-Do List', 'Decision Log',
+    'Learning Notes', 'Creative Writing', 'Recipe', 'Travel Itinerary'
+  ]);
   
   const answerRef = useRef<HTMLDivElement>(null);
   
@@ -147,6 +159,47 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected }) =>
     }
   };
   
+  // Template generation function
+  const handleGenerateTemplate = async () => {
+    if (!noteType.trim()) {
+      alert('Please enter a note type');
+      return;
+    }
+    
+    setIsGeneratingTemplate(true);
+    setTemplate(null);
+    
+    try {
+      const response = await AGNISService.generateTemplate(noteType, noteDetails);
+      setTemplate(response.data);
+    } catch (error) {
+      console.error("Template generation error:", error);
+      alert("Failed to generate template. Please try again.");
+    } finally {
+      setIsGeneratingTemplate(false);
+    }
+  };
+  
+  // Function to handle template selection and create new note
+  const handleUseTemplate = () => {
+    if (!template || !onCreateNote) return;
+    
+    onCreateNote(template.title_suggestion, template.template);
+    
+    // Reset form after creating
+    setNoteType("");
+    setNoteDetails("");
+    setTemplate(null);
+  };
+  
+  const handleQuickNoteType = (type: string) => {
+    setNoteType(type);
+    // Automatically trigger template generation when selecting a common type
+    setTimeout(() => {
+      handleGenerateTemplate();
+    }, 100);
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md h-full overflow-hidden flex flex-col">
       <div className="p-4 border-b border-gray-200">
@@ -174,7 +227,17 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected }) =>
           }`}
           onClick={() => setActiveTab('ask')}
         >
-          Ask AGNIS
+          Ask
+        </button>
+        <button
+          className={`flex-1 py-2 px-4 text-sm font-medium ${
+            activeTab === 'template' 
+              ? 'text-blue-600 border-b-2 border-blue-500' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+          onClick={() => setActiveTab('template')}
+        >
+          Template
         </button>
         <button
           className={`flex-1 py-2 px-4 text-sm font-medium ${
@@ -327,6 +390,98 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({ notes, onNoteSelected }) =>
               >
                 {isAsking && !answer && <p className="text-gray-500 italic">Thinking...</p>}
                 {answer ? <p>{answer}</p> : null}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Template Suggestion Panel */}
+      {activeTab === 'template' && (
+        <div className="p-4 flex-1 overflow-auto">
+          <h3 className="text-md font-medium text-gray-700 mb-2">Generate Note Templates</h3>
+          
+          <p className="text-sm text-gray-600 mb-4">
+            Get AI-powered structured templates for your notes.
+          </p>
+          
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              What type of note do you want to create?
+            </label>
+            <input
+              type="text"
+              value={noteType}
+              onChange={(e) => setNoteType(e.target.value)}
+              placeholder="E.g., Meeting Notes, Project Plan, Research Notes..."
+              className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
+            />
+          </div>
+          
+          <div className="mb-4">
+            <p className="text-xs font-medium text-gray-700 mb-2">Common Note Types:</p>
+            <div className="flex flex-wrap gap-2">
+              {commonNoteTypes.map(type => (
+                <button
+                  key={type}
+                  onClick={() => handleQuickNoteType(type)}
+                  className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs"
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Additional Details (Optional)
+            </label>
+            <textarea
+              value={noteDetails}
+              onChange={(e) => setNoteDetails(e.target.value)}
+              placeholder="Any specific requirements or details for your template..."
+              className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
+              rows={2}
+            />
+          </div>
+          
+          <button
+            onClick={handleGenerateTemplate}
+            disabled={isGeneratingTemplate || !noteType.trim()}
+            className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed"
+          >
+            {isGeneratingTemplate ? "Generating..." : "Generate Template"}
+          </button>
+          
+          {template && (
+            <div className="mt-4">
+              <div className="border border-green-200 bg-green-50 rounded-md p-3">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="font-medium text-green-900">
+                    Template: {template.title_suggestion}
+                  </h4>
+                  {onCreateNote && (
+                    <button
+                      onClick={handleUseTemplate}
+                      className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                    >
+                      Use Template
+                    </button>
+                  )}
+                </div>
+                <div className="bg-white p-3 rounded border border-gray-200 text-sm font-mono whitespace-pre-wrap max-h-96 overflow-y-auto">
+                  {template.template}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {isGeneratingTemplate && (
+            <div className="mt-4 text-center">
+              <p className="text-sm text-gray-500">Generating your template...</p>
+              <div className="mt-2 flex justify-center">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
               </div>
             </div>
           )}
