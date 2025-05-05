@@ -10,6 +10,7 @@ function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [darkMode, setDarkMode] = useState(false);
   const navigate = useNavigate();
 

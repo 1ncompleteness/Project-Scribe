@@ -13,6 +13,7 @@ function RegisterPage() {
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [darkMode, setDarkMode] = useState(false);
   const navigate = useNavigate();
 

@@ -40,6 +40,7 @@ function DashboardPage() {
   const [showAGNIS, setShowAGNIS] = useState(true);
   const [initialNoteTitle, setInitialNoteTitle] = useState('');
   const [initialNoteContent, setInitialNoteContent] = useState<NoteContent | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [settings, setSettings] = useState<SettingsState>(() => {
     // Get settings from localStorage
     const savedSettings = localStorage.getItem('projectScribeSettings');
@@ -64,6 +65,34 @@ function DashboardPage() {
   // Handle settings changes from AGNISSidebar
   const handleSettingsChange = (newSettings: SettingsState) => {
     setSettings(newSettings);
+    
+    // Apply settings to localStorage
+    localStorage.setItem('projectScribeSettings', JSON.stringify(newSettings));
+    
+    // Apply dark mode to body
+    if (newSettings.darkMode) {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+    }
+    
+    // Apply font size to body
+    document.body.classList.remove('font-small', 'font-medium', 'font-large');
+    document.body.classList.add(`font-${newSettings.fontSize}`);
+    
+    // Apply high contrast if enabled
+    if (newSettings.highContrast) {
+      document.body.classList.add('high-contrast');
+    } else {
+      document.body.classList.remove('high-contrast');
+    }
+    
+    // Apply reduced motion if enabled
+    if (newSettings.reducedMotion) {
+      document.body.classList.add('reduced-motion');
+    } else {
+      document.body.classList.remove('reduced-motion');
+    }
   };
 
   // Find journal by ID for a note

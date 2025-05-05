@@ -123,11 +123,6 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({
     setSettings(prev => ({...prev, ...updates}));
   };
   
-  // Get the appropriate logo based on dark mode setting
-  const getLogoSrc = () => {
-    return settings.darkMode ? "/feather-dark.svg" : "/feather-light.svg";
-  };
-  
   // Function to reset database
   const resetDatabase = async () => {
     setIsResettingDatabase(true);
