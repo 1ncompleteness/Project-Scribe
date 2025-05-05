@@ -366,57 +366,64 @@ const AGNISSidebar: React.FC<AGNISSidebarProps> = ({
       </div>
       
       {/* Tabs */}
-      <div className="flex border-b border-gray-200">
-        <button
-          className={`flex-1 py-2 px-2 text-xs sm:text-sm font-medium ${
-            activeTab === 'search' 
-              ? 'text-blue-600 border-b-2 border-blue-500' 
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-          onClick={() => setActiveTab('search')}
-        >
-          Search
-        </button>
-        <button
-          className={`flex-1 py-2 px-2 text-xs sm:text-sm font-medium ${
-            activeTab === 'ask' 
-              ? 'text-blue-600 border-b-2 border-blue-500' 
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-          onClick={() => setActiveTab('ask')}
-        >
-          Ask
-        </button>
-        <button
-          className={`flex-1 py-2 px-2 text-xs sm:text-sm font-medium ${
-            activeTab === 'template' 
-              ? 'text-blue-600 border-b-2 border-blue-500' 
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-          onClick={() => setActiveTab('template')}
-        >
-          Template
-        </button>
-        <button
-          className={`flex-1 py-2 px-2 text-xs sm:text-sm font-medium ${
-            activeTab === 'summarize' 
-              ? 'text-blue-600 border-b-2 border-blue-500' 
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-          onClick={() => setActiveTab('summarize')}
-        >
-          Summary
-        </button>
-        <button
-          className={`flex-1 py-2 px-2 text-xs sm:text-sm font-medium ${
-            activeTab === 'settings' 
-              ? 'text-blue-600 border-b-2 border-blue-500' 
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-          onClick={() => setActiveTab('settings')}
-        >
-          Settings
-        </button>
+      <div className="flex flex-col border-b border-gray-200">
+        {/* First row of tabs */}
+        <div className="flex">
+          <button
+            className={`flex-1 py-2 px-3 text-sm font-medium ${
+              activeTab === 'search' 
+                ? 'text-blue-600 border-b-2 border-blue-500' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('search')}
+          >
+            Search
+          </button>
+          <button
+            className={`flex-1 py-2 px-3 text-sm font-medium ${
+              activeTab === 'ask' 
+                ? 'text-blue-600 border-b-2 border-blue-500' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('ask')}
+          >
+            Ask
+          </button>
+          <button
+            className={`flex-1 py-2 px-3 text-sm font-medium ${
+              activeTab === 'template' 
+                ? 'text-blue-600 border-b-2 border-blue-500' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('template')}
+          >
+            Template
+          </button>
+        </div>
+        
+        {/* Second row of tabs */}
+        <div className="flex">
+          <button
+            className={`flex-1 py-2 px-3 text-sm font-medium ${
+              activeTab === 'summarize' 
+                ? 'text-blue-600 border-b-2 border-blue-500' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('summarize')}
+          >
+            Summary
+          </button>
+          <button
+            className={`flex-1 py-2 px-3 text-sm font-medium ${
+              activeTab === 'settings' 
+                ? 'text-blue-600 border-b-2 border-blue-500' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('settings')}
+          >
+            Settings
+          </button>
+        </div>
       </div>
       
       {/* Search Panel */}
