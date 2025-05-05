@@ -59,7 +59,7 @@ function App() {
           path="/"
           element={isAuthenticated ? <Navigate to="/dashboard" /> : <Navigate to="/login" />}
         />
-        {/* Catch-all route for unknown paths */}
+         {/* Catch-all route for unknown paths */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>

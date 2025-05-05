@@ -69,22 +69,22 @@ const register = (data: RegisterData) => {
 const login = async (data: LoginData) => {
     console.log('Logging in user with backend at:', API_URL + '/token');
     try {
-      // FastAPI's OAuth2PasswordRequestForm expects form data
-      const formData = new URLSearchParams();
-      formData.append('username', data.username);
-      formData.append('password', data.password);
+    // FastAPI's OAuth2PasswordRequestForm expects form data
+    const formData = new URLSearchParams();
+    formData.append('username', data.username);
+    formData.append('password', data.password);
 
-      const response = await apiClient.post('/token', formData, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      });
+    const response = await apiClient.post('/token', formData, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    });
       
       console.log('Login response:', response.data);
       
-      if (response.data.access_token) {
-        localStorage.setItem('token', response.data.access_token);
-        return response.data;
+  if (response.data.access_token) {
+    localStorage.setItem('token', response.data.access_token);
+  return response.data;
       } else {
         console.error('No access token in response:', response.data);
         throw new Error('No access token received');

@@ -121,11 +121,23 @@ const getNote = (id: string) => {
 };
 
 const createNote = (noteData: NoteCreateRequest) => {
-  return apiClient.post<Note>('/api/notes', noteData);
+  return apiClient.post<Note>('/api/notes', noteData).then(response => {
+    // Trigger embedding generation in the background
+    apiClient.post(`/api/notes/embeddings/${response.data.id}`)
+      .catch(err => console.error('Failed to generate embeddings:', err));
+    return response;
+  });
 };
 
 const updateNote = (id: string, noteData: NoteUpdateRequest) => {
-  return apiClient.put<Note>(`/api/notes/${id}`, noteData);
+  return apiClient.put<Note>(`/api/notes/${id}`, noteData).then(response => {
+    // Trigger embedding generation in the background only if content was updated
+    if (noteData.content) {
+      apiClient.post(`/api/notes/embeddings/${id}`)
+        .catch(err => console.error('Failed to generate embeddings:', err));
+    }
+    return response;
+  });
 };
 
 const deleteNote = (id: string) => {

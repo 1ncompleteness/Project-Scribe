@@ -14,6 +14,46 @@ import uuid
 import base64
 from datetime import datetime
 import json
+import numpy as np
+import re
+from sse_starlette.sse import EventSourceResponse
+from langchain_huggingface import HuggingFaceEmbeddings
+from neo4j import GraphDatabase
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+import asyncio
+import logging
+import requests
+
+# Instead, define the create_vector_index function directly here
+def create_vector_index(driver) -> None:
+    index_query = "CREATE VECTOR INDEX stackoverflow IF NOT EXISTS FOR (m:Question) ON m.embedding"
+    try:
+        driver.query(index_query)
+    except:  # Already exists
+        pass
+    index_query = (
+        "CREATE VECTOR INDEX top_answers IF NOT EXISTS FOR (m:Answer) ON m.embedding"
+    )
+    try:
+        driver.query(index_query)
+    except:  # Already exists
+        pass
+    
+    # Additional index for notes
+    index_query = "CREATE VECTOR INDEX notes_vector IF NOT EXISTS FOR (n:Note) ON n.embedding"
+    try:
+        driver.query(index_query)
+    except:  # Already exists
+        pass
+
+# Add a simple logger class to avoid utils dependency
+class BaseLogger:
+    def __init__(self) -> None:
+        self.info = print
+
+def format_docs(docs):
+    return "\n\n".join(doc.page_content for doc in docs)
 
 # Load environment variables
 load_dotenv(".env")
@@ -244,7 +284,7 @@ async def lifespan(app: FastAPI):
         create_note_constraints()
         create_journal_constraints()
         print("Constraints created successfully")
-        
+    
         # Ensure all required properties exist in the schema
         print("Ensuring properties exist...")
         ensure_property_exists("full_name")
@@ -1123,6 +1163,532 @@ async def delete_journal(journal_id: str, delete_notes: bool = False, current_us
     )
     
     return {"message": "Journal deleted successfully"}
+
+# AGNIS - Search and Question Answering API Endpoints
+class SearchQuery(BaseModel):
+    query: str
+
+class SearchResult(BaseModel):
+    id: str
+    title: str
+    excerpt: str
+    score: float
+    tags: List[str] = []
+
+class SearchResponse(BaseModel):
+    results: List[SearchResult]
+    total: int
+
+class QuestionQuery(BaseModel):
+    text: str
+    system_prompt: Optional[str] = None
+    rag: bool = True
+
+class QuestionResponse(BaseModel):
+    answer: str
+    sources: List[str] = []
+    model: str = "llama3"
+
+# Load embedding model for semantic search
+embedding_model = HuggingFaceEmbeddings(
+    model_name="all-MiniLM-L6-v2", 
+    cache_folder="/embedding_model"
+)
+
+# Full-text search endpoint
+@app.get("/api/search", response_model=SearchResponse)
+async def search_notes(query: str, current_user: User = Depends(get_current_active_user)):
+    if not query or len(query.strip()) < 2:
+        return {"results": [], "total": 0}
+    
+    # Create case-insensitive regex pattern
+    pattern = re.compile(query, re.IGNORECASE)
+    
+    # Search notes by title and content
+    results = neo4j_graph.query(
+        """
+        MATCH (n:Note)-[:CREATED_BY]->(u:User {username: $username})
+        WHERE n.title =~ $query_regex OR n.content =~ $query_regex
+        RETURN n.id as id, n.title as title, n.content as content, 
+               n.tags as tags, n.updated_at as updated_at,
+               CASE 
+                 WHEN n.title =~ $query_regex THEN 3
+                 ELSE 1
+               END as score
+        ORDER BY score DESC, n.updated_at DESC
+        LIMIT 20
+        """,
+        {"username": current_user.username, "query_regex": f"(?i).*{query}.*"}
+    )
+    
+    search_results = []
+    for result in results:
+        # Get excerpt containing the search term
+        content_dict = deserialize_json_field(result["content"])
+        text_content = content_dict.get("text", "")
+        
+        # Find position of query in text
+        match = pattern.search(text_content)
+        if match:
+            start_pos = max(0, match.start() - 50)
+            end_pos = min(len(text_content), match.end() + 50)
+            excerpt = "..." + text_content[start_pos:end_pos] + "..."
+        else:
+            excerpt = text_content[:100] + "..." if len(text_content) > 100 else text_content
+        
+        search_results.append({
+            "id": result["id"],
+            "title": result["title"],
+            "excerpt": excerpt,
+            "score": result["score"],
+            "tags": result["tags"] if result["tags"] else []
+        })
+    
+    return {"results": search_results, "total": len(search_results)}
+
+# Semantic search endpoint
+@app.get("/api/search/semantic", response_model=SearchResponse)
+async def semantic_search(query: str, current_user: User = Depends(get_current_active_user)):
+    if not query or len(query.strip()) < 2:
+        return {"results": [], "total": 0}
+    
+    # Get query embedding
+    query_embedding = embedding_model.embed_query(query)
+    
+    # Get all notes with their embeddings
+    notes = neo4j_graph.query(
+        """
+        MATCH (n:Note)-[:CREATED_BY]->(u:User {username: $username})
+        RETURN n.id as id, n.title as title, n.content as content, 
+               n.tags as tags, n.updated_at as updated_at,
+               n.embedding as embedding
+        """,
+        {"username": current_user.username}
+    )
+    
+    # Calculate similarity in Python
+    search_results = []
+    for note in notes:
+        # Extract text content for excerpt
+        content_dict = deserialize_json_field(note["content"])
+        text_content = content_dict.get("text", "")
+        
+        # If note has no embedding yet, generate one on the fly
+        if not note.get("embedding"):
+            note_text = f"{note['title']} {text_content}"
+            note_embedding = embedding_model.embed_query(note_text)
+            
+            # Optionally store this for future use
+            neo4j_graph.query(
+                """
+                MATCH (n:Note {id: $note_id})
+                SET n.embedding = $embedding
+                """,
+                {"note_id": note["id"], "embedding": note_embedding}
+            )
+        else:
+            note_embedding = note["embedding"]
+        
+        # Calculate cosine similarity
+        if isinstance(query_embedding, list):
+            query_vec = np.array(query_embedding)
+        else:
+            query_vec = query_embedding
+            
+        if isinstance(note_embedding, list):
+            note_vec = np.array(note_embedding)
+        else:
+            note_vec = note_embedding
+        
+        # Simple dot product for similarity
+        similarity = np.dot(query_vec, note_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(note_vec))
+        
+        # Only include results with reasonable similarity - lowering threshold to 0.2 to catch more potential matches
+        if similarity > 0.2:  # Changed from 0.5 to 0.2
+            excerpt = text_content[:100] + "..." if len(text_content) > 100 else text_content
+            
+            search_results.append({
+                "id": note["id"],
+                "title": note["title"],
+                "excerpt": excerpt,
+                "score": float(similarity),  # Convert to float for JSON serialization
+                "tags": note["tags"] if note["tags"] else []
+            })
+    
+    # Sort by similarity score
+    search_results.sort(key=lambda x: x["score"], reverse=True)
+    
+    # Return top results
+    return {"results": search_results[:20], "total": len(search_results)}
+
+# Tag-based search endpoint
+@app.get("/api/search/tags", response_model=SearchResponse)
+async def tag_search(query: str, current_user: User = Depends(get_current_active_user)):
+    if not query or len(query.strip()) < 2:
+        return {"results": [], "total": 0}
+    
+    # Create case-insensitive regex pattern for tag matching
+    pattern = re.compile(query, re.IGNORECASE)
+    
+    # Search notes by tags
+    results = neo4j_graph.query(
+        """
+        MATCH (n:Note)-[:CREATED_BY]->(u:User {username: $username})
+        WHERE ANY(tag IN n.tags WHERE tag =~ $query_regex)
+        RETURN n.id as id, n.title as title, n.content as content, 
+               n.tags as tags, n.updated_at as updated_at
+        ORDER BY n.updated_at DESC
+        LIMIT 20
+        """,
+        {"username": current_user.username, "query_regex": f"(?i).*{query}.*"}
+    )
+    
+    search_results = []
+    for result in results:
+        # Extract text content for excerpt
+        content_dict = deserialize_json_field(result["content"])
+        text_content = content_dict.get("text", "")
+        excerpt = text_content[:100] + "..." if len(text_content) > 100 else text_content
+        
+        # Find matching tags
+        matching_tags = []
+        if result["tags"]:
+            matching_tags = [tag for tag in result["tags"] if pattern.search(tag)]
+        
+        search_results.append({
+            "id": result["id"],
+            "title": result["title"],
+            "excerpt": excerpt,
+            "score": len(matching_tags),  # Score based on number of matching tags
+            "tags": result["tags"] if result["tags"] else []
+        })
+    
+    # Sort by score (number of matching tags)
+    search_results.sort(key=lambda x: x["score"], reverse=True)
+    
+    return {"results": search_results, "total": len(search_results)}
+
+# Generate embeddings for notes (background task or on-demand)
+def generate_note_embeddings(note_id: str = None):
+    if note_id:
+        # Generate embedding for a specific note
+        note = neo4j_graph.query(
+            """
+            MATCH (n:Note {id: $note_id})
+            RETURN n.id as id, n.content as content
+            """,
+            {"note_id": note_id}
+        )
+        
+        if not note:
+            return
+        
+        note = note[0]
+        content_dict = deserialize_json_field(note["content"])
+        text_content = content_dict.get("text", "")
+        
+        if text_content:
+            embedding = embedding_model.embed_query(text_content)
+            
+            # Store embedding back to note
+            neo4j_graph.query(
+                """
+                MATCH (n:Note {id: $note_id})
+                SET n.embedding = $embedding
+                """,
+                {"note_id": note["id"], "embedding": embedding}
+            )
+    else:
+        # Generate embeddings for all notes without embeddings
+        notes = neo4j_graph.query(
+            """
+            MATCH (n:Note)
+            WHERE n.embedding IS NULL
+            RETURN n.id as id, n.content as content
+            LIMIT 100  // Process in batches
+            """
+        )
+        
+        for note in notes:
+            content_dict = deserialize_json_field(note["content"])
+            text_content = content_dict.get("text", "")
+            
+            if text_content:
+                embedding = embedding_model.embed_query(text_content)
+                
+                # Store embedding back to note
+                neo4j_graph.query(
+                    """
+                    MATCH (n:Note {id: $note_id})
+                    SET n.embedding = $embedding
+                    """,
+                    {"note_id": note["id"], "embedding": embedding}
+                )
+
+# Hook into note creation/update to generate embeddings
+@app.post("/api/notes/embeddings/{note_id}")
+async def create_note_embedding(note_id: str, current_user: User = Depends(get_current_active_user)):
+    # Verify user owns the note
+    note = neo4j_graph.query(
+        """
+        MATCH (n:Note {id: $note_id})-[:CREATED_BY]->(u:User {username: $username})
+        RETURN n
+        """,
+        {"note_id": note_id, "username": current_user.username}
+    )
+    
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Note not found or you don't have access to it"
+        )
+    
+    # Generate embedding in background (this is a simple implementation - in production use proper async tasks)
+    generate_note_embeddings(note_id)
+    
+    return {"message": "Embedding generation started"}
+
+# Question answering endpoints - integrated with the main API
+# Remove dependency on external chains module
+# from chains import configure_qa_rag_chain, load_llm, load_embedding_model
+
+# Instead, define simple stubs for these functions
+def load_embedding_model(embedding_model_name: str, logger=None, config={}):
+    # We already have the embedding_model defined above
+    if embedding_model_name == "sentence-transformers":
+        dimension = 384
+    else:
+        dimension = 384  # Default
+    return embedding_model, dimension
+
+def load_llm(llm_name: str, logger=None, config={}):
+    # Simple stub that would be replaced with actual LLM implementation
+    return None
+
+def configure_qa_rag_chain(llm, embeddings, embeddings_store_url, username, password):
+    # Simple stub that would be replaced with actual implementation
+    return None
+
+@app.get("/query")
+async def ask_question(question: QuestionQuery = Depends(), current_user: User = Depends(get_current_active_user)):
+    if not question.text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Question text cannot be empty"
+        )
+
+    # Hard-coded use of Llama3 for now
+    llm_name = "llama3"
+    
+    try:
+        # Prepare to call Ollama API for Llama3
+        import requests
+        import os
+        
+        # Get Ollama base URL from environment variable or use default
+        ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+        
+        # Get user's notes to provide context
+        notes = neo4j_graph.query(
+            """
+            MATCH (n:Note)-[:CREATED_BY]->(u:User {username: $username})
+            RETURN n.title as title, n.content as content
+            LIMIT 5
+            """,
+            {"username": current_user.username}
+        )
+        
+        # Create context from notes
+        context = ""
+        for note in notes:
+            content_dict = deserialize_json_field(note["content"])
+            text_content = content_dict.get("text", "")
+            context += f"Title: {note['title']}\nContent: {text_content}\n\n"
+        
+        # Set up system prompt
+        system_prompt = question.system_prompt or "You are a helpful assistant answering questions based on the user's notes."
+        
+        # Prepare prompt with context if RAG is enabled
+        if question.rag and context:
+            prompt = f"""
+{system_prompt}
+
+Here are some relevant notes to help you answer:
+{context}
+
+User's question: {question.text}
+            """
+        else:
+            prompt = f"{system_prompt}\n\nUser's question: {question.text}"
+        
+        # Call Ollama API
+        response = requests.post(
+            f"{ollama_base_url}/api/generate",
+            json={
+                "model": llm_name,
+                "prompt": prompt,
+                "stream": False
+            },
+            timeout=60
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            answer = result.get("response", "Sorry, I couldn't generate a response.")
+            
+            # Extract sources from notes used
+            sources = [note["title"] for note in notes]
+            
+            return {
+                "answer": answer,
+                "sources": sources,
+                "model": llm_name
+            }
+        else:
+            # Fallback to placeholder if Ollama API fails
+            return {
+                "answer": f"Error connecting to LLM service: HTTP {response.status_code}. Please check if Ollama is running and Llama3 model is available.",
+                "sources": [],
+                "model": llm_name
+            }
+    except Exception as e:
+        # Log error and provide clear message
+        print(f"Error in LLM query: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing question: {str(e)}"
+        )
+
+@app.get("/query-stream")
+def question_stream(question: QuestionQuery = Depends(), current_user: User = Depends(get_current_active_user)):
+    # Use SSE (Server-Sent Events) to stream responses from Llama3 via Ollama
+    
+    import requests
+    import os
+    
+    # Get Ollama base URL from environment variable or use default
+    ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+    
+    async def generate():
+        try:
+            # First, send model info
+            yield json.dumps({"init": True, "model": "llama3"}) + "\n\n"
+            
+            # Get user's notes for context
+            notes = neo4j_graph.query(
+                """
+                MATCH (n:Note)-[:CREATED_BY]->(u:User {username: $username})
+                RETURN n.title as title, n.content as content
+                LIMIT 5
+                """,
+                {"username": current_user.username}
+            )
+            
+            # Create context from notes
+            context = ""
+            sources = []
+            for note in notes:
+                content_dict = deserialize_json_field(note["content"])
+                text_content = content_dict.get("text", "")
+                context += f"Title: {note['title']}\nContent: {text_content}\n\n"
+                sources.append(note["title"])
+            
+            # Set up system prompt
+            system_prompt = question.system_prompt or "You are a helpful assistant answering questions based on the user's notes."
+            
+            # Prepare prompt with context if RAG is enabled
+            if question.rag and context:
+                prompt = f"""
+{system_prompt}
+
+Here are some relevant notes to help you answer:
+{context}
+
+User's question: {question.text}
+                """
+            else:
+                prompt = f"{system_prompt}\n\nUser's question: {question.text}"
+            
+            # Call Ollama streaming API
+            response = requests.post(
+                f"{ollama_base_url}/api/generate",
+                json={
+                    "model": "llama3",
+                    "prompt": prompt,
+                    "stream": True
+                },
+                stream=True,
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                # Stream response tokens
+                for line in response.iter_lines():
+                    if line:
+                        try:
+                            chunk = json.loads(line)
+                            if "response" in chunk:
+                                yield json.dumps({"token": chunk["response"]}) + "\n\n"
+                        except json.JSONDecodeError:
+                            continue
+                            
+                # Send sources
+                yield json.dumps({"sources": sources}) + "\n\n"
+            else:
+                # If API call fails, send error message as a single token
+                error_msg = f"Error connecting to LLM service: HTTP {response.status_code}. Please check if Ollama is running and Llama3 model is available."
+                yield json.dumps({"token": error_msg}) + "\n\n"
+                yield json.dumps({"sources": []}) + "\n\n"
+                
+            # Signal completion
+            yield json.dumps({"done": True}) + "\n\n"
+            
+        except Exception as e:
+            # Log error 
+            print(f"Error in streaming LLM query: {str(e)}")
+            # Send error as a token
+            yield json.dumps({"token": f"Error: {str(e)}"}) + "\n\n"
+            yield json.dumps({"sources": []}) + "\n\n"
+            yield json.dumps({"done": True}) + "\n\n"
+    
+    return EventSourceResponse(generate(), media_type="text/event-stream")
+
+@app.post("/api/migrate/generate-all-embeddings")
+async def migrate_generate_all_embeddings(current_user: User = Depends(get_current_active_user)):
+    """Admin endpoint to generate embeddings for all notes that don't have them yet."""
+    # Check if user is admin
+    if current_user.username != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin users can run migrations"
+        )
+    
+    # Start background task to generate embeddings
+    # In a real app, you would use a proper task queue like Celery
+    try:
+        # Count notes without embeddings
+        result = neo4j_graph.query(
+            """
+            MATCH (n:Note)
+            WHERE n.embedding IS NULL
+            RETURN count(n) as missing_embeddings
+            """
+        )
+        
+        missing_count = result[0]["missing_embeddings"] if result else 0
+        
+        # Start the embedding generation process
+        generate_note_embeddings()  # This will process notes in batches
+        
+        return {
+            "message": f"Started embedding generation for notes without embeddings",
+            "notes_to_process": missing_count
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error starting migration: {str(e)}"
+        )
 
 if __name__ == "__main__":
     import uvicorn

@@ -8,17 +8,19 @@ fastapi
 # PyPDF2
 pydantic
 uvicorn
-# sse-starlette
+sse-starlette
 # boto3
 
 langchain-openai==0.3.8
-# langchain-community==0.3.19
+langchain-community==0.3.19
 # langchain-google-genai==2.0.11
 # langchain-ollama==0.2.3
-# langchain-huggingface==0.1.2
+langchain-huggingface==0.1.2
 # langchain-aws==0.2.15
 langchain-neo4j==0.4.0
 numpy
+huggingface_hub[hf_xet]
+hf_xet
 
 # Authentication backend dependencies
 passlib==1.7.4

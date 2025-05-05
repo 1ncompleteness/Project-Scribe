@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import AuthService from '../services/AuthService';
 import NoteService, { Note, Journal, NoteContent } from '../services/NoteService';
 import NoteEditor from '../components/NoteEditor';
+import AGNISSidebar from '../components/AGNISSidebar';
 
 interface UserData {
   username: string;
@@ -24,6 +25,7 @@ function DashboardPage() {
   const [journalTitle, setJournalTitle] = useState('');
   const [journalDescription, setJournalDescription] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showAGNIS, setShowAGNIS] = useState(true);
   const navigate = useNavigate();
 
   // Find journal by ID for a note
@@ -75,10 +77,10 @@ function DashboardPage() {
     fetchData();
   }, [navigate]);
 
-  const handleLogout = () => {
-    AuthService.logout();
-    navigate('/login');
-  };
+   const handleLogout = () => {
+     AuthService.logout();
+     navigate('/login');
+   };
 
   const fetchJournalNotes = async (journalId: string) => {
     try {
@@ -255,8 +257,16 @@ function DashboardPage() {
     }
   }, [selectedNote]);
 
+  // Select a note based on the ID (for AGNIS search results)
+  const handleNoteSelected = (noteId: string) => {
+    const note = notes.find(n => n.id === noteId);
+    if (note) {
+      setSelectedNote(note);
+    }
+  };
+
   if (error) {
-    return <div className="min-h-screen bg-gray-100 flex items-center justify-center"><p className="text-red-500">{error}</p></div>;
+     return <div className="min-h-screen bg-gray-100 flex items-center justify-center"><p className="text-red-500">{error}</p></div>;
   }
 
   if (!userData || isLoading) {
@@ -273,13 +283,13 @@ function DashboardPage() {
             <span className="text-gray-600">
               Welcome, {userData.full_name || userData.username}!
             </span>
-            <button
-              onClick={handleLogout}
-              className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-            >
-              Logout
-            </button>
-          </div>
+           <button
+            onClick={handleLogout}
+            className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+          >
+            Logout
+          </button>
+        </div>
         </div>
       </header>
 
@@ -302,12 +312,24 @@ function DashboardPage() {
           >
             Journals
           </button>
+          
+          {/* AGNIS toggle button */}
+          {activeTab === 'notes' && (
+            <button
+              className={`ml-auto px-4 py-2 font-medium ${
+                showAGNIS ? 'text-purple-600' : 'text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setShowAGNIS(!showAGNIS)}
+            >
+              {showAGNIS ? 'Hide AGNIS' : 'Show AGNIS'}
+            </button>
+          )}
         </div>
 
         {activeTab === 'notes' && (
           <div className="grid grid-cols-12 gap-6">
             {/* Sidebar - Journals and Notes list */}
-            <div className="col-span-12 md:col-span-4 lg:col-span-3 bg-white rounded-lg shadow-md overflow-hidden">
+            <div className={`col-span-12 ${showAGNIS ? 'md:col-span-3 lg:col-span-2' : 'md:col-span-4 lg:col-span-3'} bg-white rounded-lg shadow-md overflow-hidden`}>
               <div className="p-4 border-b border-gray-200">
                 {selectedJournal ? (
                   <div>
@@ -395,7 +417,7 @@ function DashboardPage() {
             </div>
 
             {/* Main content area */}
-            <div className="col-span-12 md:col-span-8 lg:col-span-9">
+            <div className={`col-span-12 ${showAGNIS ? 'md:col-span-6 lg:col-span-7' : 'md:col-span-8 lg:col-span-9'}`}>
               {isEditingNote && selectedNote ? (
                 <NoteEditor
                   note={selectedNote}
@@ -514,6 +536,13 @@ function DashboardPage() {
                 </div>
               )}
             </div>
+            
+            {/* AGNIS Sidebar */}
+            {showAGNIS && activeTab === 'notes' && (
+              <div className="col-span-12 md:col-span-3 lg:col-span-3">
+                <AGNISSidebar notes={notes} onNoteSelected={handleNoteSelected} />
+              </div>
+            )}
           </div>
         )}
 
@@ -618,7 +647,7 @@ function DashboardPage() {
                 ))}
               </div>
             )}
-          </div>
+      </div>
         )}
       </main>
     </div>
