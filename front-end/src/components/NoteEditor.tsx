@@ -16,7 +16,6 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
-  const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
 
   // Initialize editor with note data if editing
   useEffect(() => {
@@ -60,10 +59,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
       }
       
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      
-      // Clear previous audio chunks
-      setAudioChunks([]);
-      
+            
       // Use a local array to collect chunks during this recording session
       const chunks: Blob[] = [];
       
@@ -82,10 +78,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
           alert('No audio was recorded. Please try again.');
           return;
         }
-        
-        // Update state with all chunks collected
-        setAudioChunks(chunks);
-        
+               
         const audioBlob = new Blob(chunks, { type: mimeType || 'audio/webm' });
         console.log('Audio blob created, size:', audioBlob.size);
         
@@ -122,7 +115,6 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
 
   const deleteAudio = () => {
     setAudioUrl(null);
-    setAudioChunks([]);
   };
 
   const deleteImage = (index: number) => {
