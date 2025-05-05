@@ -2153,16 +2153,11 @@ async def generate_note_template(request: NoteTemplateRequest, current_user: Use
 @app.post("/api/admin/reset-database")
 async def reset_database(current_user: User = Depends(get_current_active_user)):
     """
-    Reset the database by removing all user data except for the admin account.
+    Reset the database by removing all user data.
     """
     print(f"Database reset requested by user: {current_user.username}")
     
-    # Only allow admin to reset the database
-    if current_user.username != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin users can reset the database"
-        )
+    # Allow any user to reset the database since data is stored locally
     
     try:
         # Delete all notes (keeping relationships for cleanup)
@@ -2189,13 +2184,14 @@ async def reset_database(current_user: User = Depends(get_current_active_user)):
             """
         )
         
-        # Delete all user accounts except admin
+        # Delete all user accounts except the current user
         neo4j_graph.query(
             """
             MATCH (u:User)
-            WHERE u.username <> 'admin'
+            WHERE u.username <> $current_username
             DETACH DELETE u
-            """
+            """,
+            {"current_username": current_user.username}
         )
         
         # Re-initialize the database with sample data
