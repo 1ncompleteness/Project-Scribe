@@ -26,6 +26,12 @@ function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
+  // Find journal by ID for a note
+  const findJournalById = (journalId: string | undefined) => {
+    if (!journalId) return null;
+    return journals.find(journal => journal.id === journalId) || null;
+  };
+
   // Fetch user data, notes, and journals on component mount
   useEffect(() => {
     const fetchData = async () => {
@@ -352,21 +358,34 @@ function DashboardPage() {
                           <p className="text-xs text-gray-400">
                             {new Date(note.updated_at).toLocaleDateString()}
                           </p>
-                          {note.tags.length > 0 && (
-                            <div className="flex flex-wrap">
-                              {note.tags.slice(0, 2).map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded mr-1"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                              {note.tags.length > 2 && (
-                                <span className="text-xs text-gray-500">+{note.tags.length - 2}</span>
-                              )}
-                            </div>
-                          )}
+                          <div className="flex flex-wrap">
+                            {/* Show journal indicator when viewing all notes (not in a specific journal) */}
+                            {!selectedJournal && note.journal_id && (
+                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded mr-1">
+                                {(() => {
+                                  const journal = findJournalById(note.journal_id);
+                                  return journal ? 
+                                    journal.title.substring(0, 10) + (journal.title.length > 10 ? '...' : '') : 
+                                    'Journal';
+                                })()}
+                              </span>
+                            )}
+                            {note.tags.length > 0 && (
+                              <div className="flex flex-wrap">
+                                {note.tags.slice(0, 2).map((tag) => (
+                                  <span
+                                    key={tag}
+                                    className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded mr-1"
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                                {note.tags.length > 2 && (
+                                  <span className="text-xs text-gray-500">+{note.tags.length - 2}</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </li>
                     ))}
@@ -393,7 +412,36 @@ function DashboardPage() {
               ) : selectedNote ? (
                 <div className="bg-white rounded-lg shadow-md p-6">
                   <div className="flex justify-between items-start mb-4">
-                    <h2 className="text-2xl font-semibold">{selectedNote.title}</h2>
+                    <div>
+                      <h2 className="text-2xl font-semibold">{selectedNote.title}</h2>
+                      
+                      {/* Show journal information if note belongs to a journal */}
+                      {selectedNote.journal_id && (
+                        <div className="mt-1">
+                          {(() => {
+                            const journal = findJournalById(selectedNote.journal_id);
+                            return journal ? (
+                              <div className="flex items-center">
+                                <span className="text-sm text-blue-600 mr-1">In journal:</span>
+                                <span 
+                                  className="text-sm bg-blue-100 text-blue-800 px-2 py-0.5 rounded cursor-pointer hover:bg-blue-200"
+                                  onClick={() => {
+                                    if (journal) {
+                                      selectJournal(journal);
+                                    }
+                                  }}
+                                  title="Click to view this journal"
+                                >
+                                  {journal.title}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-gray-500">In unknown journal</span>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
                     <div className="flex space-x-2">
                       <button
                         onClick={() => setIsEditingNote(true)}
