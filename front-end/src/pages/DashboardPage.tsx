@@ -5,6 +5,10 @@ import NoteService, { Note, Journal, NoteContent } from '../services/NoteService
 import NoteEditor from '../components/NoteEditor';
 import AGNISSidebar from '../components/AGNISSidebar';
 
+// Add a build version
+const BUILD_VERSION = "0.9.9 Alpha";
+const BUILD_DATE = "2025-05-05";
+
 interface UserData {
   username: string;
   email: string;
@@ -345,7 +349,7 @@ function DashboardPage() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="max-w-7xl mx-auto px-4 py-6 flex-grow">
         {/* Tab navigation */}
         <div className="flex border-b border-gray-200 mb-6">
           <button
@@ -380,8 +384,8 @@ function DashboardPage() {
 
         {activeTab === 'notes' && (
           <div className="grid grid-cols-12 gap-6">
-            {/* Sidebar - Journals and Notes list */}
-            <div className={`col-span-12 ${showAGNIS ? 'md:col-span-3 lg:col-span-2' : 'md:col-span-4 lg:col-span-3'} bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden`}>
+            {/* Sidebar - Journals and Notes list - INCREASED WIDTH */}
+            <div className={`col-span-12 ${showAGNIS ? 'md:col-span-4 lg:col-span-3' : 'md:col-span-5 lg:col-span-4'} bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden`}>
               <div className="p-4 border-b border-gray-200 dark:border-gray-700">
                 {selectedJournal ? (
                   <div>
@@ -468,8 +472,8 @@ function DashboardPage() {
               </div>
             </div>
 
-            {/* Main content area */}
-            <div className={`col-span-12 ${showAGNIS ? 'md:col-span-6 lg:col-span-7' : 'md:col-span-8 lg:col-span-9'}`}>
+            {/* Main content area - ADJUSTED BASED ON SIDEBAR WIDTH */}
+            <div className={`col-span-12 ${showAGNIS ? 'md:col-span-5 lg:col-span-6' : 'md:col-span-7 lg:col-span-8'}`}>
               {isEditingNote && selectedNote ? (
                 <NoteEditor
                   note={selectedNote}
@@ -604,7 +608,7 @@ function DashboardPage() {
               )}
             </div>
             
-            {/* AGNIS Sidebar */}
+            {/* AGNIS Sidebar - RETAINED SAME SIZE */}
             {showAGNIS && activeTab === 'notes' && (
               <div className="col-span-12 md:col-span-3 lg:col-span-3">
                 <AGNISSidebar 
@@ -722,6 +726,18 @@ function DashboardPage() {
           </div>
         )}
       </main>
+
+      {/* New Footer */}
+      <footer className="bg-white dark:bg-gray-800 shadow py-4 px-6">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            &copy; {new Date().getFullYear()} Project Scribe. All rights reserved.
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Version {BUILD_VERSION} (Build: {BUILD_DATE})
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
