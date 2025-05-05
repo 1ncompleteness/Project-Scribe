@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Note, NoteContent } from '../services/NoteService';
+import NoteService from '../services/NoteService';
 
 interface NoteEditorProps {
   note?: Note;
@@ -16,6 +17,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [isGeneratingTags, setIsGeneratingTags] = useState(false);
+  const [autoGenerateTags, setAutoGenerateTags] = useState(false);
 
   // Initialize editor with note data if editing
   useEffect(() => {
@@ -123,7 +126,57 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
     setImages(newImages);
   };
 
-  const handleSubmit = () => {
+  // Handle tag generation
+  const handleGenerateTags = async () => {
+    if (!title && !content) {
+      return; // Don't generate tags if there's no content
+    }
+    
+    setIsGeneratingTags(true);
+    
+    try {
+      const response = await NoteService.generateTags(title, content);
+      
+      if (response.data && response.data.tags && response.data.tags.length > 0) {
+        // Format tags as comma-separated string
+        const newTags = response.data.tags.join(', ');
+        setTags(newTags);
+      }
+    } catch (error) {
+      console.error('Error generating tags:', error);
+    } finally {
+      setIsGeneratingTags(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    // If auto-generate tags is enabled and we don't have any tags yet, generate them
+    if (autoGenerateTags && !tags.trim()) {
+      setIsGeneratingTags(true);
+      
+      try {
+        const response = await NoteService.generateTags(title, content);
+        
+        if (response.data && response.data.tags && response.data.tags.length > 0) {
+          // Use the generated tags directly
+          const noteContent: NoteContent = {
+            text: content,
+            images: images,
+            audio: audioUrl || undefined
+          };
+          
+          onSave(title, noteContent, response.data.tags);
+          return; // We're done - no need to continue with the original save
+        }
+      } catch (error) {
+        console.error('Error auto-generating tags during save:', error);
+        // Continue with save without tags if generation failed
+      } finally {
+        setIsGeneratingTags(false);
+      }
+    }
+    
+    // Original save logic
     const noteContent: NoteContent = {
       text: content,
       images: images,
@@ -175,14 +228,43 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
         <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="tags">
           Tags (comma separated)
         </label>
-        <input
-          id="tags"
-          type="text"
-          value={tags}
-          onChange={(e) => setTags(e.target.value)}
-          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-          placeholder="tag1, tag2, tag3"
-        />
+        <div className="flex">
+          <input
+            id="tags"
+            type="text"
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            placeholder="tag1, tag2, tag3"
+          />
+          <button
+            type="button"
+            onClick={handleGenerateTags}
+            disabled={isGeneratingTags || (!title && !content)}
+            className="ml-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:opacity-50"
+            title="Generate tags based on title and content using AI"
+          >
+            {isGeneratingTags ? 'Generating...' : 'Auto-Generate'}
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 mt-1">
+          Click "Auto-Generate" to use AI to create relevant tags from your note content.
+        </p>
+      </div>
+      
+      <div className="mb-6">
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            checked={autoGenerateTags}
+            onChange={(e) => setAutoGenerateTags(e.target.checked)}
+            className="mr-2"
+          />
+          <span className="text-sm text-gray-700">Auto-generate tags when saving (if no tags provided)</span>
+        </label>
+        <p className="text-xs text-gray-500 ml-5 mt-1">
+          When enabled, tags will be automatically generated if you leave the tags field empty.
+        </p>
       </div>
       
       {/* Image upload section */}
@@ -297,25 +379,21 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
         )}
       </div>
       
-      <div className="flex items-center justify-between">
+      <div className="flex justify-end mt-6">
         <button
           type="button"
           onClick={onCancel}
-          className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+          className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mr-2"
         >
           Cancel
         </button>
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={!title || !content}
-          className={`${
-            !title || !content
-              ? 'bg-blue-300 cursor-not-allowed'
-              : 'bg-blue-500 hover:bg-blue-700'
-          } text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline`}
+          disabled={isGeneratingTags || !title.trim()}
+          className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:opacity-50"
         >
-          {note ? 'Update Note' : 'Create Note'}
+          {note ? 'Update' : 'Save'} {isGeneratingTags && 'and generating tags...'}
         </button>
       </div>
     </div>

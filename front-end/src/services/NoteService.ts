@@ -194,6 +194,14 @@ const deleteJournal = (id: string, deleteNotes: boolean = false) => {
   return apiClient.delete(`/api/journals/${id}?delete_notes=${deleteNotes}`);
 };
 
+// New tag generation method
+const generateTags = (title: string, content: string) => {
+  return apiClient.post<{ tags: string[] }>('/api/notes/generate-tags', { 
+    title, 
+    content 
+  });
+};
+
 const NoteService = {
   getNotes,
   getNote,
@@ -205,7 +213,8 @@ const NoteService = {
   getJournalNotes,
   createJournal,
   updateJournal,
-  deleteJournal
+  deleteJournal,
+  generateTags,
 };
 
 export default NoteService; 

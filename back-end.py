@@ -1833,6 +1833,102 @@ async def query_stream(
     # Return the streaming response object
     return EventSourceResponse(event_generator(), media_type="text/event-stream")
 
+class TagGenerationRequest(BaseModel):
+    title: str
+    content: str
+    
+class TagGenerationResponse(BaseModel):
+    tags: List[str]
+
+@app.post("/api/notes/generate-tags", response_model=TagGenerationResponse)
+async def generate_tags(request: TagGenerationRequest, current_user: User = Depends(get_current_active_user)):
+    """
+    Generate tags based on note title and content using the LLM.
+    """
+    print(f"Generating tags for note: {request.title}")
+    
+    if not request.title and not request.content:
+        print("Empty note content, returning default tags")
+        return {"tags": ["note"]}
+    
+    # Combine title and content for context
+    content_text = f"Title: {request.title}\nContent: {request.content}"
+    
+    # Use Ollama API for tag generation
+    ollama_url = os.getenv("OLLAMA_API_URL", "http://host.docker.internal:11434/api/chat")
+    
+    # Create prompt for tag generation - improved to handle multiple languages
+    system_prompt = """You are a helpful assistant specializing in generating relevant tags for notes.
+    
+    Instructions:
+    1. Extract 3-7 relevant tags from the provided content
+    2. Tags should be single words or short phrases (1-3 words maximum)
+    3. Focus on key topics, concepts, and entities
+    4. Keep the tags in the same language as the original content
+    5. Make tags lowercase unless they are proper nouns
+    6. Return ONLY the comma-separated list of tags - no explanations or other text
+    
+    Example good response: "technology, python, web development, api, documentation"
+    """
+    
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": content_text}
+    ]
+    
+    payload = {
+        "model": os.getenv("OLLAMA_MODEL", "llama3"),
+        "messages": messages,
+        "stream": False,
+        "temperature": 0.1  # Low temperature for more predictable output
+    }
+    
+    try:
+        response = requests.post(ollama_url, json=payload, timeout=30)
+        response.raise_for_status()
+        result = response.json()
+        
+        if "message" in result and "content" in result["message"]:
+            # Extract tags from response, handling potential formatting variations
+            tags_text = result["message"]["content"].strip()
+            
+            # Remove any backticks, code blocks, or extra formatting that might be included
+            tags_text = tags_text.replace("```", "").strip()
+            
+            # Handle case where LLM might add a heading like "Tags: " before the list
+            if ":" in tags_text and len(tags_text.split(":", 1)) == 2:
+                tags_text = tags_text.split(":", 1)[1].strip()
+                
+            # Handle case where LLM adds list markers like "1. tag1, 2. tag2"
+            # First replace numbered list items
+            tags_text = re.sub(r'\d+\.\s+', '', tags_text)
+            # Then replace bullet points
+            tags_text = re.sub(r'[-*•]\s+', '', tags_text)
+            
+            # Split tags by comma and clean them up
+            tags = [tag.strip() for tag in tags_text.split(",") if tag.strip()]
+            
+            # Enforce reasonable limits
+            if len(tags) < 1:
+                tags = ["note"]  # Fallback if we get no tags
+            if len(tags) > 10:
+                tags = tags[:10]  # Limit to 10 tags max
+                
+            print(f"Generated {len(tags)} tags: {', '.join(tags)}")
+            return {"tags": tags}
+        else:
+            print("Unexpected response structure from LLM")
+            return {"tags": ["note"]}  # Fallback 
+    except requests.exceptions.Timeout:
+        print("Timeout error generating tags")
+        return {"tags": ["note"]}
+    except requests.exceptions.RequestException as e:
+        print(f"Network error generating tags: {str(e)}")
+        return {"tags": ["note"]}
+    except Exception as e:
+        print(f"Unexpected error generating tags: {str(e)}")
+        return {"tags": ["note"]}  # Basic fallback tag
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8585)
