@@ -203,13 +203,15 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
         </div>
         
         {images.length > 0 && (
-          <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {images.map((image, index) => (
               <div key={index} className="relative">
                 <img
                   src={image}
                   alt={`Uploaded ${index + 1}`}
-                  className="w-full h-32 object-cover rounded"
+                  className="w-full max-h-96 object-contain rounded cursor-pointer"
+                  onClick={() => window.open(image, '_blank')}
+                  title="Click to view full size"
                 />
                 <button
                   type="button"
@@ -232,7 +234,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
           Audio
         </label>
         
-        {!audioUrl ? (
+        {(!audioUrl || isRecording) ? (
           <div className="flex items-center">
             {!isRecording ? (
               <button
@@ -259,7 +261,16 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
         ) : (
           <div className="flex flex-col">
             <div className="flex items-center mb-2">
-              <audio controls src={audioUrl} className="w-full mr-2"></audio>
+              <audio 
+                controls 
+                src={audioUrl} 
+                className="w-full mr-2"
+                onLoadedMetadata={(e) => {
+                  // Reset the audio to the beginning
+                  const audio = e.target as HTMLAudioElement;
+                  audio.currentTime = 0;
+                }}
+              ></audio>
             </div>
             <div className="flex items-center">
               <button
@@ -271,7 +282,12 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, journalId, onSave, onCanc
               </button>
               <button
                 type="button"
-                onClick={startRecording}
+                onClick={() => {
+                  setAudioUrl(null);
+                  setTimeout(() => {
+                    startRecording();
+                  }, 10);
+                }}
                 className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded"
               >
                 Record Again
