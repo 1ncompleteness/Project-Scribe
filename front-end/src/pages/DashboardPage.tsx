@@ -57,11 +57,6 @@ function DashboardPage() {
   });
   const navigate = useNavigate();
 
-  // Get the appropriate logo based on dark mode setting
-  const getLogoSrc = () => {
-    return settings.darkMode ? "/feather-dark.svg" : "/feather-light.svg";
-  };
-
   // Handle settings changes from AGNISSidebar
   const handleSettingsChange = (newSettings: SettingsState) => {
     setSettings(newSettings);
@@ -331,7 +326,7 @@ function DashboardPage() {
       <header className="bg-white shadow dark:bg-gray-800">
         <div className="mx-auto px-4 py-3 flex justify-between items-center">
           <div className="flex items-center">
-            <img src={getLogoSrc()} alt="Project Scribe" className="h-8 mr-3" />
+            <img src="/project-scribe-icon.svg" alt="Project Scribe" className="h-8 mr-3" />
             <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Project Scribe</h1>
           </div>
           <div className="flex items-center space-x-4">
@@ -386,26 +381,26 @@ function DashboardPage() {
         {activeTab === 'notes' && (
           <div className="grid grid-cols-12 gap-6">
             {/* Sidebar - Journals and Notes list */}
-            <div className={`col-span-12 ${showAGNIS ? 'md:col-span-3 lg:col-span-2' : 'md:col-span-4 lg:col-span-3'} bg-white rounded-lg shadow-md overflow-hidden`}>
-              <div className="p-4 border-b border-gray-200">
+            <div className={`col-span-12 ${showAGNIS ? 'md:col-span-3 lg:col-span-2' : 'md:col-span-4 lg:col-span-3'} bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden`}>
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700">
                 {selectedJournal ? (
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <h2 className="text-xl font-semibold">{selectedJournal.title}</h2>
+                      <h2 className="text-xl font-semibold text-gray-800 dark:text-white">{selectedJournal.title}</h2>
                       <button
                         onClick={clearJournalSelection}
-                        className="text-blue-500 hover:text-blue-700"
+                        className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                       >
                         Back to All Notes
                       </button>
                     </div>
                     {selectedJournal.description && (
-                      <p className="text-gray-600 text-sm mb-2">{selectedJournal.description}</p>
+                      <p className="text-gray-600 dark:text-gray-400 text-sm mb-2">{selectedJournal.description}</p>
                     )}
-                    <p className="text-gray-500 text-sm">{selectedJournal.note_count} notes</p>
+                    <p className="text-gray-500 dark:text-gray-500 text-sm">{selectedJournal.note_count} notes</p>
                   </div>
                 ) : (
-                  <h2 className="text-xl font-semibold">All Notes</h2>
+                  <h2 className="text-xl font-semibold text-gray-800 dark:text-white">All Notes</h2>
                 )}
                 <button
                   onClick={() => setIsCreatingNote(true)}
@@ -417,30 +412,30 @@ function DashboardPage() {
 
               <div className="overflow-y-auto max-h-96">
                 {notes.length === 0 ? (
-                  <p className="p-4 text-gray-500">No notes yet. Create your first note!</p>
+                  <p className="p-4 text-gray-500 dark:text-gray-400">No notes yet. Create your first note!</p>
                 ) : (
-                  <ul className="divide-y divide-gray-200">
+                  <ul className="divide-y divide-gray-200 dark:divide-gray-700">
                     {notes.map((note) => (
                       <li
                         key={note.id}
-                        className={`p-4 cursor-pointer hover:bg-gray-50 ${
-                          selectedNote?.id === note.id ? 'bg-blue-50' : ''
+                        className={`p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                          selectedNote?.id === note.id ? 'bg-blue-50 dark:bg-blue-900' : ''
                         }`}
                         onClick={() => setSelectedNote(note)}
                       >
-                        <h3 className="font-medium text-gray-900 truncate">{note.title}</h3>
-                        <p className="text-gray-500 text-sm truncate">
+                        <h3 className="font-medium text-gray-900 dark:text-white truncate">{note.title}</h3>
+                        <p className="text-gray-500 dark:text-gray-400 text-sm truncate">
                           {note.content.text.substring(0, 60)}
                           {note.content.text.length > 60 ? '...' : ''}
                         </p>
                         <div className="flex justify-between mt-1">
-                          <p className="text-xs text-gray-400">
+                          <p className="text-xs text-gray-400 dark:text-gray-500">
                             {new Date(note.updated_at).toLocaleDateString()}
                           </p>
                           <div className="flex flex-wrap">
                             {/* Show journal indicator when viewing all notes (not in a specific journal) */}
                             {!selectedJournal && note.journal_id && (
-                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded mr-1">
+                              <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-2 py-0.5 rounded mr-1">
                                 {(() => {
                                   const journal = findJournalById(note.journal_id);
                                   return journal ? 
@@ -454,13 +449,13 @@ function DashboardPage() {
                                 {note.tags.slice(0, 2).map((tag) => (
                                   <span
                                     key={tag}
-                                    className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded mr-1"
+                                    className="text-xs bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300 px-2 py-0.5 rounded mr-1"
                                   >
                                     {tag}
                                   </span>
                                 ))}
                                 {note.tags.length > 2 && (
-                                  <span className="text-xs text-gray-500">+{note.tags.length - 2}</span>
+                                  <span className="text-xs text-gray-500 dark:text-gray-400">+{note.tags.length - 2}</span>
                                 )}
                               </div>
                             )}
@@ -504,10 +499,10 @@ function DashboardPage() {
                   />
                 </div>
               ) : selectedNote ? (
-                <div className="bg-white rounded-lg shadow-md p-6">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h2 className="text-2xl font-semibold">{selectedNote.title}</h2>
+                      <h2 className="text-2xl font-semibold text-gray-800 dark:text-white">{selectedNote.title}</h2>
                       
                       {/* Show journal information if note belongs to a journal */}
                       {selectedNote.journal_id && (
@@ -516,9 +511,9 @@ function DashboardPage() {
                             const journal = findJournalById(selectedNote.journal_id);
                             return journal ? (
                               <div className="flex items-center">
-                                <span className="text-sm text-blue-600 mr-1">In journal:</span>
+                                <span className="text-sm text-blue-600 dark:text-blue-400 mr-1">In journal:</span>
                                 <span 
-                                  className="text-sm bg-blue-100 text-blue-800 px-2 py-0.5 rounded cursor-pointer hover:bg-blue-200"
+                                  className="text-sm bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 px-2 py-0.5 rounded cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-800"
                                   onClick={() => {
                                     if (journal) {
                                       selectJournal(journal);
@@ -530,7 +525,7 @@ function DashboardPage() {
                                 </span>
                               </div>
                             ) : (
-                              <span className="text-sm text-gray-500">In unknown journal</span>
+                              <span className="text-sm text-gray-500 dark:text-gray-400">In unknown journal</span>
                             );
                           })()}
                         </div>
@@ -539,13 +534,13 @@ function DashboardPage() {
                     <div className="flex space-x-2">
                       <button
                         onClick={() => setIsEditingNote(true)}
-                        className="text-blue-500 hover:text-blue-700 mr-2"
+                        className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 mr-2"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => deleteNote(selectedNote.id)}
-                        className="text-red-500 hover:text-red-700"
+                        className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
                       >
                         Delete
                       </button>
@@ -553,16 +548,16 @@ function DashboardPage() {
                   </div>
                   
                   {/* Text content */}
-                  <div className="mb-4 whitespace-pre-wrap">{selectedNote.content.text}</div>
+                  <div className="mb-4 whitespace-pre-wrap text-gray-700 dark:text-gray-300">{selectedNote.content.text}</div>
                   
                   {/* Display tags */}
                   {selectedNote.tags && selectedNote.tags.length > 0 && (
                     <div className="flex flex-wrap mb-4">
-                      <h3 className="font-medium text-gray-700 w-full mb-2">Tags</h3>
+                      <h3 className="font-medium text-gray-700 dark:text-gray-300 w-full mb-2">Tags</h3>
                       {selectedNote.tags.map((tag) => (
                         <span
                           key={tag}
-                          className="text-sm bg-gray-200 text-gray-700 px-2 py-1 rounded mr-2 mb-2"
+                          className="text-sm bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300 px-2 py-1 rounded mr-2 mb-2"
                         >
                           {tag}
                         </span>
@@ -598,13 +593,13 @@ function DashboardPage() {
                     </div>
                   )}
                   
-                  <div className="text-gray-500 text-sm">
+                  <div className="text-gray-500 dark:text-gray-400 text-sm">
                     Updated {new Date(selectedNote.updated_at).toLocaleString()}
                   </div>
                 </div>
               ) : (
-                <div className="bg-white rounded-lg shadow-md p-6">
-                  <p className="text-gray-500">Select a note from the list to view its content, or create a new note.</p>
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+                  <p className="text-gray-500 dark:text-gray-400">Select a note from the list to view its content, or create a new note.</p>
                 </div>
               )}
             </div>
@@ -626,7 +621,7 @@ function DashboardPage() {
         {activeTab === 'journals' && (
           <div>
             <div className="mb-6 flex justify-between items-center">
-              <h2 className="text-2xl font-semibold">Your Journals</h2>
+              <h2 className="text-2xl font-semibold text-gray-800 dark:text-white">Your Journals</h2>
               <button
                 onClick={() => setIsCreatingJournal(true)}
                 className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
@@ -636,10 +631,10 @@ function DashboardPage() {
             </div>
 
             {isCreatingJournal && (
-              <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-                <h3 className="text-xl font-semibold mb-4">Create New Journal</h3>
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
+                <h3 className="text-xl font-semibold text-gray-800 dark:text-white mb-4">Create New Journal</h3>
                 <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="journalTitle">
+                  <label className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" htmlFor="journalTitle">
                     Title
                   </label>
                   <input
@@ -647,19 +642,19 @@ function DashboardPage() {
                     type="text"
                     value={journalTitle}
                     onChange={(e) => setJournalTitle(e.target.value)}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    className="shadow appearance-none border dark:border-gray-600 rounded w-full py-2 px-3 text-gray-700 dark:text-white dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                     placeholder="Journal title"
                   />
                 </div>
                 <div className="mb-6">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="journalDescription">
+                  <label className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" htmlFor="journalDescription">
                     Description
                   </label>
                   <textarea
                     id="journalDescription"
                     value={journalDescription}
                     onChange={(e) => setJournalDescription(e.target.value)}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline h-24"
+                    className="shadow appearance-none border dark:border-gray-600 rounded w-full py-2 px-3 text-gray-700 dark:text-white dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline h-24"
                     placeholder="Journal description (optional)"
                   />
                 </div>
@@ -686,19 +681,19 @@ function DashboardPage() {
             )}
 
             {journals.length === 0 ? (
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <p className="text-gray-500">No journals yet. Create your first journal!</p>
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+                <p className="text-gray-500 dark:text-gray-400">No journals yet. Create your first journal!</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {journals.map((journal) => (
-                  <div key={journal.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+                  <div key={journal.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
                     <div className="p-6">
-                      <h3 className="text-xl font-semibold mb-2">{journal.title}</h3>
+                      <h3 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">{journal.title}</h3>
                       {journal.description && (
-                        <p className="text-gray-600 mb-4">{journal.description}</p>
+                        <p className="text-gray-600 dark:text-gray-400 mb-4">{journal.description}</p>
                       )}
-                      <p className="text-gray-500 text-sm mb-4">
+                      <p className="text-gray-500 dark:text-gray-500 text-sm mb-4">
                         {journal.note_count} notes • Created{' '}
                         {new Date(journal.created_at).toLocaleDateString()}
                       </p>
@@ -714,7 +709,7 @@ function DashboardPage() {
                         </button>
                         <button
                           onClick={() => deleteJournal(journal.id)}
-                          className="text-red-500 hover:text-red-700 border border-red-500 hover:border-red-700 font-bold py-2 px-4 rounded"
+                          className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-500 hover:border-red-700 dark:border-red-400 dark:hover:border-red-300 font-bold py-2 px-4 rounded"
                         >
                           Delete
                         </button>
@@ -724,7 +719,7 @@ function DashboardPage() {
                 ))}
               </div>
             )}
-      </div>
+          </div>
         )}
       </main>
     </div>
