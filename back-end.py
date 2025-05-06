@@ -1603,8 +1603,8 @@ async def semantic_search(query: str, current_user: User = Depends(get_current_a
             # Calculate dot product for similarity
             similarity = np.dot(query_vec, item_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(item_vec))
             
-            # Only include results with reasonable similarity - threshold at 0.2
-            if similarity > 0.2:
+            # Only include results with reasonable similarity - threshold at 0.5
+            if similarity > 0.5:
                 search_results.append({
                     "id": item["id"],
                     "title": item["title"],
