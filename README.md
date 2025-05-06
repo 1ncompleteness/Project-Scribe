@@ -63,8 +63,8 @@ This application uses Docker for containerization, ensuring a consistent develop
 
 1.  **Clone the Repository:**
     ```bash
-    git clone [YOUR_PROJECT_SCRIBE_REPO_URL]
-    cd project-scribe # Or your repository name
+    git clone https://github.com/b3hr0uz/Project-Scribe
+    cd Project-Scribe # Or your repository name
     ```
 2.  **Configure Environment:**
     *   Copy the example environment file: `cp env.example .env`
@@ -141,11 +141,11 @@ Project Scribe consists of the following services managed by Docker Compose:
 
 | Service Name | Main files/folders | Compose name | URLs                 | Description                                                                                                                                  |
 |--------------|--------------------|--------------|----------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
-| Backend API  | `back-end.py`      | `back-end`   | http://localhost:8585 | FastAPI application providing RESTful endpoints. **Built entirely from scratch for Project Scribe.** Handles auth, CRUD, search, and LLM features. |
+| Backend API  | `back-end.py`      | `back-end`   | http://localhost:8585 | FastAPI application providing RESTful endpoints. Handles auth, CRUD, search, and LLM features. |
 | Frontend UI  | `front-end/`       | `front-end`  | http://localhost:8505 | SvelteKit web application providing the user interface. Interacts with the Backend API.                                                     |
 | Database     | (Neo4j Image)      | `database`   | http://localhost:7474 | Neo4j graph database storing user data, notes, journals, relationships, and vector embeddings. Access via Neo4j Browser.                      |
 | LLM Service  | (Ollama Image)     | `llm` / `llm-gpu` | N/A (internal)    | (Optional - Linux profile only) Runs the Ollama LLM service within Docker. Accessed by the Backend API.                                     |
 
 ## Based on GenAI Stack
 
-Project Scribe was bootstrapped using the [GenAI Stack template](https://github.com/neo4j-graph-analytics/genai-stack). This provided the initial setup for Docker, Neo4j integration, example configurations, and LLM interaction patterns, significantly accelerating development. The original README structure and setup concepts have been adapted and expanded for Project Scribe.
+Project Scribe leverages the foundational setup provided by the [GenAI Stack template](https://github.com/docker/genai-stack). This template offered the initial Docker configuration, Neo4j integration, and examples for LLM interaction. Building upon this base, the entire full-stack application, particularly the backend API (`back-end.py`), was bootstrapped specifically for Project Scribe's note-taking and knowledge management features.
