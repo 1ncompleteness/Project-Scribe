@@ -54,7 +54,13 @@ function RegisterPage() {
       console.error('Registration error:', err);
       if (err.response) {
         console.error('Error response:', err.response.data);
-        setError(`Registration failed: ${err.response.data?.detail || JSON.stringify(err.response.data) || 'Unknown error'}`);
+        // Check if the error contains "Username or email already registered" regardless of status code
+        const errorDetail = err.response.data?.detail || '';
+        if (errorDetail.includes('Username or email already registered')) {
+          setError('Username or email is already registered. Please use different credentials.');
+        } else {
+          setError(`Registration failed: ${errorDetail || JSON.stringify(err.response.data) || 'Unknown error'}`);
+        }
       } else if (err.request) {
         console.error('No response received:', err.request);
         setError('Registration failed: No response from server. Check network connectivity.');

@@ -538,8 +538,8 @@ async def register_user(user: UserCreate, request: Request):
     print(f"Registration request received from: {request.client.host}")
     print(f"Registration attempt for user: {user.username}, email: {user.email}")
     
+    # First, check if user already exists before trying to create
     try:
-        # Check if user already exists
         existing_user = neo4j_graph.query(
             """
             MATCH (u:User) 
@@ -548,21 +548,30 @@ async def register_user(user: UserCreate, request: Request):
             """,
             {"username": user.username, "email": user.email}
         )
+    except Exception as e:
+        print(f"Error checking for existing user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error checking for existing user: {str(e)}"
+        )
+    
+    # If user exists, return 400 error - this is outside any try/except block
+    if existing_user:
+        print(f"User already exists: {user.username}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username or email already registered"
+        )
         
-        if existing_user:
-            print(f"User already exists: {user.username}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username or email already registered"
-            )
-        
+    # Now try to create the user
+    try:
         # Create new user
         hashed_password = get_password_hash(user.password)
         
         # Ensure full_name is always a string
         full_name = user.full_name if user.full_name is not None else ''
         
-        # Use MERGE instead of CREATE to be more robust
+        # Create user
         neo4j_graph.query(
             """
             CREATE (u:User {
@@ -592,7 +601,7 @@ async def register_user(user: UserCreate, request: Request):
         }
         
     except Exception as e:
-        print(f"Error creating user: {str(e)}")
+        print(f"Error during user creation: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create user: {str(e)}"
@@ -1298,7 +1307,7 @@ async def search_notes(query: str, current_user: User = Depends(get_current_acti
             "excerpt": excerpt,
             "score": result["score"],
             "tags": result["tags"] if result["tags"] else [],
-            "type": result["type"]
+            "type": "note"  # Always set a default type for text search results
         })
     
     return {"results": search_results, "total": len(search_results)}
@@ -1435,8 +1444,7 @@ async def tag_search(tags: str, current_user: User = Depends(get_current_active_
         MATCH (n:Note)-[:CREATED_BY]->(u:User {username: $username})
         WHERE any(tag IN n.tags WHERE tag IN $tag_list)
         RETURN n.id as id, n.title as title, n.content as content, 
-               n.tags as tags, n.updated_at as updated_at,
-               'note' as type
+               n.tags as tags, n.updated_at as updated_at
         ORDER BY n.updated_at DESC
         """,
         {"username": current_user.username, "tag_list": tag_list}
@@ -1458,7 +1466,7 @@ async def tag_search(tags: str, current_user: User = Depends(get_current_active_
             "excerpt": excerpt,
             "score": len(matching_tags),  # Score based on number of matching tags
             "tags": result["tags"] if result["tags"] else [],
-            "type": result["type"]
+            "type": "note"  # Always set a default type
         })
     
     # Sort by score (number of matching tags)
