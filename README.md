@@ -53,11 +53,14 @@ This application uses Docker for containerization, ensuring a consistent develop
 ### Prerequisites
 
 1.  **Git:** Ensure Git is installed (`git --version`). Used for version control and cloning the repository.
-2.  **Docker:** Install Docker Desktop (MacOS/Windows) or Docker Engine (Linux). This is required to build and run the application containers.
+2.  **Docker Installation:** **Before proceeding with setup**, you must install Docker Desktop (MacOS/Windows) or Docker Engine (Linux) on your system. This is required to build and run the application containers.
     *   [Install Docker](https://docs.docker.com/get-docker/)
     > [!WARNING]
     > There was a performance issue impacting python applications in Docker Desktop `4.24.x`. Please upgrade to the latest release.
-3.  **Ollama (MacOS/Windows Host):** If running on MacOS or Windows, install [Ollama](https://ollama.ai) locally on your host machine. Start the Ollama server (`ollama serve`) before running Docker Compose. Download the required LLM (e.g., `ollama pull llama3`).
+3.  **Ollama Installation (MacOS/Windows Host):** If running on MacOS or Windows, **you must install [Ollama](https://ollama.ai) locally on your host machine before running Docker Compose.**
+    *   Start the Ollama server (`ollama serve`) before running Docker Compose.
+    *   Download the required LLM via Ollama (e.g., `ollama pull llama3`).
+    *(Note: For Linux, Ollama can optionally be run inside a Docker container using the specific profiles mentioned in the next section.)*
 
 ### Installation & Setup
 
