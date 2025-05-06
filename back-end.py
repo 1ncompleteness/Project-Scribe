@@ -366,6 +366,113 @@ async def lifespan(app: FastAPI):
         print("Starting database initialization...")
         initialize_database()
         print("Database initialization completed")
+        
+        # Generate embeddings for all notes and journals without embeddings
+        print("Checking for notes and journals without embeddings...")
+        
+        # Count notes without embeddings
+        result = neo4j_graph.query(
+            """
+            MATCH (n:Note)
+            WHERE n.embedding IS NULL
+            RETURN count(n) as notes_without_embeddings
+            """
+        )
+        notes_without_embeddings = result[0]["notes_without_embeddings"] if result else 0
+        
+        # Count journals without embeddings
+        result = neo4j_graph.query(
+            """
+            MATCH (j:Journal)
+            WHERE j.embedding IS NULL
+            RETURN count(j) as journals_without_embeddings
+            """
+        )
+        journals_without_embeddings = result[0]["journals_without_embeddings"] if result else 0
+        
+        if notes_without_embeddings > 0 or journals_without_embeddings > 0:
+            print(f"Found {notes_without_embeddings} notes and {journals_without_embeddings} journals without embeddings")
+            print("Generating missing embeddings...")
+            
+            # Process notes without embeddings
+            if notes_without_embeddings > 0:
+                notes = neo4j_graph.query(
+                    """
+                    MATCH (n:Note)
+                    WHERE n.embedding IS NULL
+                    RETURN n.id as id, n.title as title, n.content as content
+                    """
+                )
+                
+                print(f"Processing {len(notes)} notes without embeddings")
+                for i, note in enumerate(notes):
+                    content_dict = deserialize_json_field(note["content"])
+                    text_content = content_dict.get("text", "")
+                    
+                    # Include title in embedding to improve search relevance
+                    embed_text = f"{note['title']} {text_content}"
+                    
+                    if embed_text.strip():
+                        try:
+                            embedding = embedding_model.embed_query(embed_text)
+                            
+                            # Store embedding back to note
+                            neo4j_graph.query(
+                                """
+                                MATCH (n:Note {id: $note_id})
+                                SET n.embedding = $embedding
+                                """,
+                                {"note_id": note["id"], "embedding": embedding}
+                            )
+                            
+                            if (i + 1) % 10 == 0:
+                                print(f"Processed {i + 1}/{len(notes)} notes")
+                        except Exception as e:
+                            print(f"Error generating embedding for note {note['id']}: {e}")
+                
+                print(f"Completed embedding generation for {len(notes)} notes")
+            
+            # Process journals without embeddings
+            if journals_without_embeddings > 0:
+                journals = neo4j_graph.query(
+                    """
+                    MATCH (j:Journal)
+                    WHERE j.embedding IS NULL
+                    RETURN j.id as id, j.title as title, j.description as description
+                    """
+                )
+                
+                print(f"Processing {len(journals)} journals without embeddings")
+                for i, journal in enumerate(journals):
+                    description = journal.get("description", "")
+                    
+                    # Combine title and description for embedding
+                    embed_text = f"{journal['title']} {description}"
+                    
+                    if embed_text.strip():
+                        try:
+                            embedding = embedding_model.embed_query(embed_text)
+                            
+                            # Store embedding back to journal
+                            neo4j_graph.query(
+                                """
+                                MATCH (j:Journal {id: $journal_id})
+                                SET j.embedding = $embedding
+                                """,
+                                {"journal_id": journal["id"], "embedding": embedding}
+                            )
+                            
+                            if (i + 1) % 10 == 0:
+                                print(f"Processed {i + 1}/{len(journals)} journals")
+                        except Exception as e:
+                            print(f"Error generating embedding for journal {journal['id']}: {e}")
+                
+                print(f"Completed embedding generation for {len(journals)} journals")
+            
+            print("Finished generating all missing embeddings")
+        else:
+            print("All notes and journals already have embeddings")
+        
     except Exception as e:
         print(f"Error during startup: {str(e)}")
         import traceback
@@ -1321,113 +1428,197 @@ async def semantic_search(query: str, current_user: User = Depends(get_current_a
     # Get query embedding
     query_embedding = embedding_model.embed_query(query)
     
-    # Get all notes with their embeddings
-    notes = neo4j_graph.query(
-        """
-        MATCH (n:Note)-[:CREATED_BY]->(u:User {username: $username})
-        RETURN n.id as id, n.title as title, n.content as content, 
-               n.tags as tags, n.updated_at as updated_at,
-               n.embedding as embedding,
-               'note' as type
-        """,
-        {"username": current_user.username}
-    )
-    
-    # Get all journals with their embeddings
-    journals = neo4j_graph.query(
-        """
-        MATCH (j:Journal)-[:OWNED_BY]->(u:User {username: $username})
-        RETURN j.id as id, j.title as title, j.description as description, 
-               j.updated_at as updated_at, j.embedding as embedding,
-               'journal' as type
-        """,
-        {"username": current_user.username}
-    )
-    
-    # Combine results for processing
-    all_items = notes + journals
-    
-    # Calculate similarity in Python
-    search_results = []
-    for item in all_items:
-        item_type = item.get("type", "note")
+    # Use Neo4j vector index for faster and more comprehensive searching
+    try:
+        # Search notes using vector index
+        note_results = neo4j_graph.query(
+            """
+            CALL db.index.vector.queryNodes('notes_vector', $top_k, $query_embedding) YIELD node, score
+            MATCH (node)-[:CREATED_BY]->(u:User {username: $username})
+            WHERE score > 0.5  // Lower threshold for more results
+            RETURN node.id as id, node.title as title, node.content as content, 
+                   node.tags as tags, node.updated_at as updated_at,
+                   score, 'note' as type
+            ORDER BY score DESC
+            """,
+            {
+                "username": current_user.username,
+                "query_embedding": query_embedding,
+                "top_k": 15  # Increase for more comprehensive results
+            }
+        )
         
-        if item_type == "note":
+        # Search journals using vector index
+        journal_results = neo4j_graph.query(
+            """
+            CALL db.index.vector.queryNodes('journals_vector', $top_k, $query_embedding) YIELD node, score
+            MATCH (node)-[:OWNED_BY]->(u:User {username: $username})
+            WHERE score > 0.5  // Lower threshold for more results
+            RETURN node.id as id, node.title as title, node.description as description, 
+                   node.updated_at as updated_at,
+                   score, 'journal' as type
+            ORDER BY score DESC
+            """,
+            {
+                "username": current_user.username,
+                "query_embedding": query_embedding,
+                "top_k": 10  # Increase for more comprehensive results
+            }
+        )
+        
+        # Process note results
+        search_results = []
+        for note in note_results:
             # Extract text content for excerpt
-            content_dict = deserialize_json_field(item["content"])
+            content_dict = deserialize_json_field(note["content"])
             text_content = content_dict.get("text", "")
-            
-            # If note has no embedding yet, generate one on the fly
-            if not item.get("embedding"):
-                note_text = f"{item['title']} {text_content}"
-                item_embedding = embedding_model.embed_query(note_text)
-                
-                # Store this for future use
-                neo4j_graph.query(
-                    """
-                    MATCH (n:Note {id: $item_id})
-                    SET n.embedding = $embedding
-                    """,
-                    {"item_id": item["id"], "embedding": item_embedding}
-                )
-            else:
-                item_embedding = item["embedding"]
-            
             excerpt = text_content[:100] + "..." if len(text_content) > 100 else text_content
-            tags = item["tags"] if item["tags"] else []
             
-        else:  # journal
-            # If journal has no embedding yet, generate one on the fly
-            description = item.get("description", "")
-            
-            if not item.get("embedding"):
-                journal_text = f"{item['title']} {description}"
-                item_embedding = embedding_model.embed_query(journal_text)
-                
-                # Store this for future use
-                neo4j_graph.query(
-                    """
-                    MATCH (j:Journal {id: $item_id})
-                    SET j.embedding = $embedding
-                    """,
-                    {"item_id": item["id"], "embedding": item_embedding}
-                )
-            else:
-                item_embedding = item["embedding"]
-            
-            excerpt = description[:100] + "..." if len(description) > 100 else description
-            tags = []  # Journals don't have tags
-            
-        # Calculate cosine similarity
-        if isinstance(query_embedding, list):
-            query_vec = np.array(query_embedding)
-        else:
-            query_vec = query_embedding
-            
-        if isinstance(item_embedding, list):
-            item_vec = np.array(item_embedding)
-        else:
-            item_vec = item_embedding
-        
-        # Calculate dot product for similarity
-        similarity = np.dot(query_vec, item_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(item_vec))
-        
-        # Only include results with reasonable similarity - threshold at 0.2
-        if similarity > 0.2:
             search_results.append({
-                "id": item["id"],
-                "title": item["title"],
+                "id": note["id"],
+                "title": note["title"],
                 "excerpt": excerpt,
-                "score": float(similarity),  # Convert to float for JSON serialization
-                "tags": tags,
-                "type": item_type  # Include type in results
+                "score": float(note["score"]),  # Convert to float for JSON serialization
+                "tags": note["tags"] if note["tags"] else [],
+                "type": note["type"]
             })
-    
-    # Sort by similarity score
-    search_results.sort(key=lambda x: x["score"], reverse=True)
-    
-    # Limit to top 20 results
-    return {"results": search_results[:20], "total": len(search_results[:20])}
+        
+        # Process journal results
+        for journal in journal_results:
+            description = journal.get("description", "")
+            excerpt = description[:100] + "..." if len(description) > 100 else description
+            
+            search_results.append({
+                "id": journal["id"],
+                "title": journal["title"],
+                "excerpt": excerpt,
+                "score": float(journal["score"]),  # Convert to float for JSON serialization
+                "tags": [],  # Journals don't have tags
+                "type": journal["type"]
+            })
+        
+        # Sort by score and limit to top results
+        search_results.sort(key=lambda x: x["score"], reverse=True)
+        
+        return {"results": search_results[:20], "total": len(search_results[:20])}
+        
+    except Exception as e:
+        print(f"Error during vector search: {e}")
+        
+        # Fallback to old method if vector search fails
+        print("Falling back to manual similarity calculation")
+        
+        # Get all notes with their embeddings
+        notes = neo4j_graph.query(
+            """
+            MATCH (n:Note)-[:CREATED_BY]->(u:User {username: $username})
+            RETURN n.id as id, n.title as title, n.content as content, 
+                   n.tags as tags, n.updated_at as updated_at,
+                   n.embedding as embedding,
+                   'note' as type
+            """,
+            {"username": current_user.username}
+        )
+        
+        # Get all journals with their embeddings
+        journals = neo4j_graph.query(
+            """
+            MATCH (j:Journal)-[:OWNED_BY]->(u:User {username: $username})
+            RETURN j.id as id, j.title as title, j.description as description, 
+                   j.updated_at as updated_at, j.embedding as embedding,
+                   'journal' as type
+            """,
+            {"username": current_user.username}
+        )
+        
+        # Combine results for processing
+        all_items = notes + journals
+        
+        # Calculate similarity in Python
+        search_results = []
+        for item in all_items:
+            item_type = item.get("type", "note")
+            
+            if item_type == "note":
+                # Extract text content for excerpt
+                content_dict = deserialize_json_field(item["content"])
+                text_content = content_dict.get("text", "")
+                
+                # If note has no embedding yet, generate one on the fly
+                if not item.get("embedding"):
+                    note_text = f"{item['title']} {text_content}"
+                    item_embedding = embedding_model.embed_query(note_text)
+                    
+                    # Store this for future use
+                    neo4j_graph.query(
+                        """
+                        MATCH (n:Note {id: $item_id})
+                        SET n.embedding = $embedding
+                        """,
+                        {"item_id": item["id"], "embedding": item_embedding}
+                    )
+                else:
+                    item_embedding = item["embedding"]
+                
+                excerpt = text_content[:100] + "..." if len(text_content) > 100 else text_content
+                tags = item["tags"] if item["tags"] else []
+                
+            else:  # journal
+                # If journal has no embedding yet, generate one on the fly
+                description = item.get("description", "")
+                
+                if not item.get("embedding"):
+                    journal_text = f"{item['title']} {description}"
+                    item_embedding = embedding_model.embed_query(journal_text)
+                    
+                    # Store this for future use
+                    neo4j_graph.query(
+                        """
+                        MATCH (j:Journal {id: $item_id})
+                        SET j.embedding = $embedding
+                        """,
+                        {"item_id": item["id"], "embedding": item_embedding}
+                    )
+                else:
+                    item_embedding = item["embedding"]
+                
+                excerpt = description[:100] + "..." if len(description) > 100 else description
+                tags = []  # Journals don't have tags
+            
+            # Skip items without embeddings
+            if not item_embedding:
+                continue
+                
+            # Calculate cosine similarity
+            if isinstance(query_embedding, list):
+                query_vec = np.array(query_embedding)
+            else:
+                query_vec = query_embedding
+                
+            if isinstance(item_embedding, list):
+                item_vec = np.array(item_embedding)
+            else:
+                item_vec = item_embedding
+            
+            # Calculate dot product for similarity
+            similarity = np.dot(query_vec, item_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(item_vec))
+            
+            # Only include results with reasonable similarity - threshold at 0.2
+            if similarity > 0.2:
+                search_results.append({
+                    "id": item["id"],
+                    "title": item["title"],
+                    "excerpt": excerpt,
+                    "score": float(similarity),  # Convert to float for JSON serialization
+                    "tags": tags,
+                    "type": item_type  # Include type in results
+                })
+        
+        # Sort by similarity score
+        search_results.sort(key=lambda x: x["score"], reverse=True)
+        
+        # Limit to top 20 results
+        return {"results": search_results[:20], "total": len(search_results[:20])}
 
 # Tag-based search endpoint
 @app.get("/api/search/tags", response_model=SearchResponse)
@@ -1717,12 +1908,12 @@ async def query_stream(
                 # Use semantic search to find relevant context
                 query_embedding = embedding_model.embed_query(text)
 
-                # Search notes using vector index
+                # Search notes using vector index - lower threshold for more results
                 note_results = neo4j_graph.query(
                     """
                     CALL db.index.vector.queryNodes('notes_vector', $top_k, $query_embedding) YIELD node, score
                     MATCH (node)-[:CREATED_BY]->(u:User {username: $username})
-                    WHERE score > 0.7  // Adjust threshold as needed
+                    WHERE score > 0.3  // Lowered threshold significantly to get more results
                     RETURN node.id as id, node.title as title, node.content as content, score
                     ORDER BY score DESC
                     LIMIT 3
@@ -1730,7 +1921,7 @@ async def query_stream(
                     {
                         "username": current_user.username,
                         "query_embedding": query_embedding,
-                        "top_k": 5 # Ask for more results initially, then filter by score and limit
+                        "top_k": 10 # Ask for more results initially, then filter by score and limit
                     }
                 )
 
@@ -1739,7 +1930,7 @@ async def query_stream(
                     """
                     CALL db.index.vector.queryNodes('journals_vector', $top_k, $query_embedding) YIELD node, score
                     MATCH (node)-[:OWNED_BY]->(u:User {username: $username})
-                    WHERE score > 0.7  // Adjust threshold as needed
+                    WHERE score > 0.3  // Lowered threshold significantly to get more results
                     RETURN node.id as id, node.title as title, node.description as description, score
                     ORDER BY score DESC
                     LIMIT 2
@@ -1747,9 +1938,55 @@ async def query_stream(
                     {
                         "username": current_user.username,
                         "query_embedding": query_embedding,
-                        "top_k": 3
+                        "top_k": 10
                     }
                 )
+
+                print(f"Found {len(note_results)} note results and {len(journal_results)} journal results")
+
+                # If no results from vector search, fall back to keyword search
+                if not note_results and not journal_results:
+                    print("No vector search results, falling back to keyword search")
+                    
+                    # Extract keywords from query (simple approach - split by spaces and take words longer than 3 chars)
+                    keywords = [word for word in text.split() if len(word) > 3]
+                    if not keywords:
+                        keywords = text.split()  # If no long words, just use all words
+                    
+                    # Create regex pattern for keywords
+                    keyword_pattern = '|'.join(keywords)
+                    
+                    # Search notes by keyword
+                    note_results = neo4j_graph.query(
+                        """
+                        MATCH (n:Note)-[:CREATED_BY]->(u:User {username: $username})
+                        WHERE n.title =~ $pattern OR n.content =~ $pattern
+                        RETURN n.id as id, n.title as title, n.content as content, 
+                               1.0 as score
+                        LIMIT 3
+                        """,
+                        {
+                            "username": current_user.username, 
+                            "pattern": f"(?i).*({keyword_pattern}).*"
+                        }
+                    )
+                    
+                    # Search journals by keyword
+                    journal_results = neo4j_graph.query(
+                        """
+                        MATCH (j:Journal)-[:OWNED_BY]->(u:User {username: $username})
+                        WHERE j.title =~ $pattern OR j.description =~ $pattern
+                        RETURN j.id as id, j.title as title, j.description as description, 
+                               1.0 as score
+                        LIMIT 2
+                        """,
+                        {
+                            "username": current_user.username, 
+                            "pattern": f"(?i).*({keyword_pattern}).*"
+                        }
+                    )
+                    
+                    print(f"Keyword search found {len(note_results)} notes and {len(journal_results)} journals")
 
                 context_items = []
                 for res in note_results:
@@ -1766,15 +2003,17 @@ async def query_stream(
                 if context_items:
                     # Correctly join context items
                     context = "\n\n---\n\n".join(context_items)
-                    print(f"Found RAG context: {len(context_items)} items.")
+                    print(f"Found RAG context: {len(context_items)} items")
                 else:
-                    print("No relevant RAG context found.")
+                    print("No relevant RAG context found")
 
                 # Send sources info first
                 yield json.dumps({"type": "sources", "data": sources}) + "\n\n"
 
             except Exception as e:
                 print(f"Error during RAG search: {e}")
+                import traceback
+                traceback.print_exc()
                 # Continue without context if RAG fails
 
         # Prepare messages for Ollama (use chat endpoint format)
