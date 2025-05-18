@@ -41,6 +41,7 @@
     ]
   },
   "devDependencies": {
+    "@types/quill": "^2.0.14",
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.31",
     "react-app-rewired": "^2.2.1",
