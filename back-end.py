@@ -1374,7 +1374,7 @@ async def search_notes(query: str, current_user: User = Depends(get_current_acti
         return {"results": [], "total": 0}
     
     # Create case-insensitive regex pattern
-    pattern = re.compile(query, re.IGNORECASE)
+    pattern = re.compile(re.escape(query), re.IGNORECASE)
     
     # Search notes by title and content
     results = neo4j_graph.query(
