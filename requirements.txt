@@ -24,6 +24,6 @@ hf_xet
 
 # Authentication backend dependencies
 passlib==1.7.4
-python-jose==3.4.0
-python-multipart==0.0.18
+python-jose==3.5.0
+python-multipart==0.0.22
 bcrypt==4.0.1
