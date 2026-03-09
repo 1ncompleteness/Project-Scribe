@@ -2,7 +2,7 @@ import os
 
 import streamlit as st
 from streamlit.logger import get_logger
-from langchain.callbacks.base import BaseCallbackHandler
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_neo4j import Neo4jGraph
 from dotenv import load_dotenv
 from utils import (

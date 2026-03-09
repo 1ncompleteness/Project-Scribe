@@ -2,9 +2,9 @@ import os
 
 import streamlit as st
 from PyPDF2 import PdfReader
-from langchain.callbacks.base import BaseCallbackHandler
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.callbacks import BaseCallbackHandler
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_neo4j import Neo4jVector
 from streamlit.logger import get_logger
 from chains import (
