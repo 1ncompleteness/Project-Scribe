@@ -15,7 +15,7 @@ from chains import (
 )
 from fastapi import FastAPI, Depends
 from pydantic import BaseModel
-from langchain.callbacks.base import BaseCallbackHandler
+from langchain_core.callbacks import BaseCallbackHandler
 from threading import Thread
 from queue import Queue, Empty
 from collections.abc import Generator

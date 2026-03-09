@@ -11,20 +11,21 @@ uvicorn
 sse-starlette
 # boto3
 
-langchain-core>=0.3.81
-langchain-openai==0.3.8
-langchain-community==0.3.27
+langchain-core>=1.2.11
+langchain-text-splitters>=1.1.0
+langchain-openai>=1.1.0
+langchain-community>=0.4.0
 # langchain-google-genai==2.0.11
 # langchain-ollama==0.2.3
-langchain-huggingface==0.1.2
+langchain-huggingface>=1.2.0
 # langchain-aws==0.2.15
-langchain-neo4j==0.4.0
+langchain-neo4j>=0.8.0
 numpy
 huggingface_hub[hf_xet]
 hf_xet
 
 # Authentication backend dependencies
 passlib==1.7.4
-python-jose==3.5.0
+PyJWT>=2.7.0
 python-multipart==0.0.22
 bcrypt==4.0.1
